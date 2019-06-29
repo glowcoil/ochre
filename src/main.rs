@@ -1,3 +1,4 @@
+mod input;
 mod window;
 
 extern crate glutin;

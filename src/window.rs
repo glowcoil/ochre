@@ -30,10 +30,27 @@ impl Window {
             self.events_loop.poll_events(|event| {
                 match event {
                     glutin::Event::WindowEvent { event, .. } => {
+                        use glutin::WindowEvent::*;
                         match event {
-                            glutin::WindowEvent::CloseRequested => {
+                            Resized(size) => {}
+                            Moved(position) => {}
+                            CloseRequested => {
                                 running = false;
                             }
+                            Destroyed => {}
+                            DroppedFile(path) => {}
+                            HoveredFile(path) => {}
+                            HoveredFileCancelled => {}
+                            ReceivedCharacter(c) => {}
+                            Focused(focus) => {}
+                            KeyboardInput { input, .. } => {}
+                            CursorMoved { position, modifiers, .. } => {}
+                            CursorEntered { .. } => {}
+                            CursorLeft { .. } => {}
+                            MouseWheel { delta, modifiers, .. } => {}
+                            MouseInput { state, button, modifiers, .. } => {}
+                            Refresh => {}
+                            HiDpiFactorChanged(factor) => {}
                             _ => {}
                         }
                     }
