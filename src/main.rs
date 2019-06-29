@@ -1,6 +1,8 @@
 mod input;
+mod render;
 mod window;
 
+extern crate gl;
 extern crate glutin;
 
 use window::Window;

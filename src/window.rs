@@ -1,8 +1,11 @@
+use crate::render::{Renderer, Vertex};
+
 const FRAME: std::time::Duration = std::time::Duration::from_micros(1_000_000 / 60);
 
 pub struct Window {
     events_loop: glutin::EventsLoop,
     context: glutin::ContextWrapper<glutin::PossiblyCurrent, glutin::Window>,
+    renderer: Renderer,
 }
 
 impl Window {
@@ -15,7 +18,11 @@ impl Window {
             .build_windowed(window_builder, &events_loop).unwrap();
         let context = unsafe { context.make_current() }.unwrap();
 
-        Window { events_loop, context }
+        gl::load_with(|symbol| context.get_proc_address(symbol) as *const _);
+
+        let renderer = Renderer::new();
+
+        Window { events_loop, context, renderer }
     }
 
     pub fn run(&mut self) {
@@ -24,6 +31,17 @@ impl Window {
         while running {
             let elapsed = now.elapsed();
             now = std::time::Instant::now();
+
+            unsafe {
+                gl::ClearColor(0.0, 0.0, 0.0, 1.0);
+                gl::Clear(gl::COLOR_BUFFER_BIT);
+            }
+
+            self.renderer.draw(&[
+                Vertex { pos: [-0.5, -0.5, 0.0], col: [1.0, 1.0, 1.0, 1.0] },
+                Vertex { pos: [ 0.5, -0.5, 0.0], col: [1.0, 1.0, 1.0, 1.0] },
+                Vertex { pos: [ 0.0,  0.5, 0.0], col: [1.0, 1.0, 1.0, 1.0] },
+            ], &[0, 1, 2]);
 
             self.context.swap_buffers().unwrap();
 
