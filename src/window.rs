@@ -28,9 +28,11 @@ impl Window {
     pub fn run(&mut self) {
         let mut running = true;
         let mut now = std::time::Instant::now();
+        let mut fps_counter = FpsCounter::new();
         while running {
             let elapsed = now.elapsed();
             now = std::time::Instant::now();
+            fps_counter.update(elapsed);
 
             unsafe {
                 gl::ClearColor(0.0, 0.0, 0.0, 1.0);
@@ -81,5 +83,32 @@ impl Window {
                 std::thread::sleep(FRAME - elapsed);
             }
         }
+    }
+}
+
+struct FpsCounter {
+    frames: [u32; 100],
+    i: usize,
+    sum: u32,
+}
+
+impl FpsCounter {
+    fn new() -> FpsCounter {
+        FpsCounter {
+            frames: [0; 100],
+            i: 0,
+            sum: 0,
+        }
+    }
+
+    fn update(&mut self, elapsed: std::time::Duration) {
+        self.sum -= self.frames[self.i];
+        self.frames[self.i] = elapsed.as_secs() as u32 * 1000000 + elapsed.subsec_micros();
+        self.sum += self.frames[self.i];
+        self.i = (self.i + 1) % self.frames.len();
+    }
+
+    fn fps(&self) -> f32 {
+        100000000.0 / (self.sum as f32)
     }
 }
