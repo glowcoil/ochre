@@ -51,6 +51,21 @@ impl Graphics {
             .line_to(Point::new(pos.x + size.x, pos.y))
             .fill_convex();
     }
+
+    pub fn fill_round_rect(&mut self, pos: Point, size: Point, radius: f32) {
+        let radius = radius.min(0.5 * size.x).min(0.5 * size.y);
+        self.path()
+            .move_to(Point::new(pos.x, pos.y + radius))
+            .line_to(Point::new(pos.x, pos.y + size.y - radius))
+            .arc_to(radius, Point::new(pos.x + radius, pos.y + size.y))
+            .line_to(Point::new(pos.x + size.x - radius, pos.y + size.y))
+            .arc_to(radius, Point::new(pos.x + size.x, pos.y + size.y - radius))
+            .line_to(Point::new(pos.x + size.x, pos.y + radius))
+            .arc_to(radius, Point::new(pos.x + size.x - radius, pos.y))
+            .line_to(Point::new(pos.x + radius, pos.y))
+            .arc_to(radius, Point::new(pos.x, pos.y + radius))
+            .fill_convex();
+    }
 }
 
 pub struct PathBuilder<'g> {

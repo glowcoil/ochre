@@ -45,13 +45,13 @@ impl Window {
                 .move_to(Point::new(400.0, 300.0))
                 .quadratic_to(Point::new(500.0, 200.0), Point::new(400.0, 100.0))
                 .cubic_to(Point::new(350.0, 150.0), Point::new(100.0, 250.0), Point::new(400.0, 300.0))
-                .line_to(Point::new(0.0, 0.0))
                 .fill_convex();
             self.graphics.path()
                 .move_to(Point::new(600.0, 300.0))
                 .arc_to(50.0, Point::new(600.0, 400.0))
                 .arc_to(50.0, Point::new(600.0, 300.0))
                 .fill_convex();
+            self.graphics.fill_round_rect(Point::new(100.0, 10.0), Point::new(100.0, 100.0), 20.0);
             self.graphics.end_frame();
 
             self.context.swap_buffers().unwrap();
