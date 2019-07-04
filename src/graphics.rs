@@ -80,6 +80,42 @@ impl<'g> PathBuilder<'g> {
         self
     }
 
+    pub fn quadratic_to(&mut self, control: Point, point: Point) -> &mut Self {
+        let a_x = self.cursor.x - 2.0 * control.x + point.x;
+        let a_y = self.cursor.y - 2.0 * control.y + point.y;
+        let dt = ((4.0 * TOLERANCE) / (a_x * a_x + a_y * a_y)).sqrt();
+        let mut t = 0.0;
+        while t < 1.0 {
+            let p12 = Point::lerp(t, self.cursor, control);
+            let p23 = Point::lerp(t, control, point);
+            self.points.push(Point::lerp(t, p12, p23));
+            t += dt;
+        }
+        self.cursor = point;
+        self
+    }
+
+    pub fn cubic_to(&mut self, control1: Point, control2: Point, point: Point) -> &mut Self {
+        let a_x = -self.cursor.x + 3.0 * control1.x - 3.0 * control2.x + point.x;
+        let b_x = 3.0 * (self.cursor.x - 2.0 * control1.x + control2.x);
+        let a_y = -self.cursor.y + 3.0 * control1.y - 3.0 * control2.y + point.y;
+        let b_y = 3.0 * (self.cursor.y - 2.0 * control1.y + control2.y);
+        let conc = (b_x * b_x + b_y * b_y).max((a_x + b_x) * (a_x + b_x) + (a_y + b_y) * (a_y + b_y));
+        let dt = ((4.0 * TOLERANCE) / conc).sqrt();
+        let mut t = 0.0;
+        while t < 1.0 {
+            let p12 = Point::lerp(t, self.cursor, control1);
+            let p23 = Point::lerp(t, control1, control2);
+            let p34 = Point::lerp(t, control2, point);
+            let p123 = Point::lerp(t, p12, p23);
+            let p234 = Point::lerp(t, p23, p34);
+            self.points.push(Point::lerp(t, p123, p234));
+            t += dt;
+        }
+        self.cursor = point;
+        self
+    }
+
     pub fn fill_convex(&mut self) {
         self.points.push(self.cursor);
         let start = self.graphics.vertices.len() as u16;
