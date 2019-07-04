@@ -116,6 +116,35 @@ impl<'g> PathBuilder<'g> {
         self
     }
 
+    pub fn arc_to(&mut self, radius: f32, point: Point) -> &mut Self {
+        let winding = radius.signum();
+        let to_midpoint = 0.5 * (point - self.cursor);
+        let dist_to_midpoint = to_midpoint.length();
+        let radius = radius.abs().max(to_midpoint.length());
+        let dist_to_center = (radius * radius - dist_to_midpoint * dist_to_midpoint).sqrt();
+        let to_center = winding * dist_to_center * if to_midpoint.length() == 0.0 {
+            Point::new(-1.0, 0.0)
+        } else {
+            Point::new(to_midpoint.y, -to_midpoint.x).normalized()
+        };
+        let center = self.cursor + to_midpoint + to_center;
+        let mut angle = self.cursor - center;
+        let end_angle = point - center;
+        let rotor_x = (1.0 - 2.0 * (TOLERANCE / radius)).max(0.0);
+        let rotor_y = -winding * (1.0 - rotor_x * rotor_x).sqrt();
+        loop {
+            self.points.push(center + angle);
+            let prev_sign = winding * (angle.x * end_angle.y - angle.y * end_angle.x);
+            angle = Point::new(rotor_x * angle.x - rotor_y * angle.y, rotor_x * angle.y + rotor_y * angle.x);
+            let sign = winding * (angle.x * end_angle.y - angle.y * end_angle.x);
+            if prev_sign <= 0.0 && sign >= 0.0 {
+                break;
+            }
+        }
+        self.cursor = point;
+        self
+    }
+
     pub fn fill_convex(&mut self) {
         self.points.push(self.cursor);
         let start = self.graphics.vertices.len() as u16;
