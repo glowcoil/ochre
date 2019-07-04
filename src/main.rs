@@ -1,3 +1,4 @@
+mod graphics;
 mod input;
 mod render;
 mod window;

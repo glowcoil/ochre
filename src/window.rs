@@ -1,11 +1,11 @@
-use crate::render::{Renderer, Vertex};
+use crate::graphics::{Graphics, Point};
 
 const FRAME: std::time::Duration = std::time::Duration::from_micros(1_000_000 / 60);
 
 pub struct Window {
     events_loop: glutin::EventsLoop,
     context: glutin::ContextWrapper<glutin::PossiblyCurrent, glutin::Window>,
-    renderer: Renderer,
+    graphics: Graphics,
 }
 
 impl Window {
@@ -20,9 +20,9 @@ impl Window {
 
         gl::load_with(|symbol| context.get_proc_address(symbol) as *const _);
 
-        let renderer = Renderer::new();
+        let graphics = Graphics::new(800.0, 600.0);
 
-        Window { events_loop, context, renderer }
+        Window { events_loop, context, graphics }
     }
 
     pub fn run(&mut self) {
@@ -39,11 +39,9 @@ impl Window {
                 gl::Clear(gl::COLOR_BUFFER_BIT);
             }
 
-            self.renderer.draw(&[
-                Vertex { pos: [-0.5, -0.5, 0.0], col: [1.0, 1.0, 1.0, 1.0] },
-                Vertex { pos: [ 0.5, -0.5, 0.0], col: [1.0, 1.0, 1.0, 1.0] },
-                Vertex { pos: [ 0.0,  0.5, 0.0], col: [1.0, 1.0, 1.0, 1.0] },
-            ], &[0, 1, 2]);
+            self.graphics.begin_frame();
+            self.graphics.fill_rect(Point::new(0.0, 0.0), Point::new(10.0, 10.0));
+            self.graphics.end_frame();
 
             self.context.swap_buffers().unwrap();
 
