@@ -162,13 +162,30 @@ impl<'g> PathBuilder<'g> {
 
     pub fn fill_convex(&mut self) {
         self.points.push(self.cursor);
+        let mut i = 1;
+        if self.points.len() < 3 { return; }
         let start = self.graphics.vertices.len() as u16;
-        for point in self.points.iter() {
-            let ndc = point.pixel_to_ndc(self.graphics.width, self.graphics.height);
-            self.graphics.vertices.push(Vertex { pos: [ndc.x, ndc.y, 0.0], col: [1.0, 1.0, 1.0, 1.0] });
+        for i in 0..self.points.len() {
+            let prev = self.points[(i + self.points.len() - 1) % self.points.len()];
+            let curr = self.points[i];
+            let next = self.points[(i + 1) % self.points.len()];
+            let prev_tangent = curr - prev;
+            let next_tangent = next - curr;
+            let tangent = prev_tangent + next_tangent;
+            let normal = Point::new(-tangent.y, tangent.x).normalized();
+            let inner = (curr - 0.5 * normal).pixel_to_ndc(self.graphics.width, self.graphics.height);
+            let outer = (curr + 0.5 * normal).pixel_to_ndc(self.graphics.width, self.graphics.height);
+            self.graphics.vertices.push(Vertex { pos: [inner.x, inner.y, 0.0], col: [1.0, 1.0, 1.0, 1.0] });
+            self.graphics.vertices.push(Vertex { pos: [outer.x, outer.y, 0.0], col: [1.0, 1.0, 1.0, 0.0] });
         }
-        for i in (start+1)..(self.graphics.vertices.len() as u16 - 1) {
-            self.graphics.indices.extend(&[start, i, i + 1]);
+        for i in 1..(self.points.len().saturating_sub(1) as u16) {
+            self.graphics.indices.extend_from_slice(&[start, start + 2 * i, start + 2 * (i + 1)]);
+        }
+        for i in 0..(self.points.len() as u16) {
+            self.graphics.indices.extend_from_slice(&[
+                start + 2 * i, start + 2 * i + 1, start + 2 * ((i + 1) % self.points.len() as u16) + 1,
+                start + 2 * i, start + 2 * ((i + 1) % self.points.len() as u16) + 1, start + 2 * ((i + 1) % self.points.len() as u16),
+            ]);
         }
     }
 }
@@ -217,6 +234,11 @@ impl Point {
     pub fn normalized(self) -> Point {
         let len = self.length();
         Point { x: self.x / len, y: self.y / len }
+    }
+
+    #[inline]
+    pub fn dot(self, other: Point) -> f32 {
+        self.x * other.x + self.y * other.y
     }
 
     #[inline]
