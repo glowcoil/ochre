@@ -27,7 +27,7 @@ impl Graphics {
     }
 
     pub fn clear(&mut self, color: Color) {
-        self.renderer.clear(color.to_linear());
+        self.renderer.clear(color.to_linear_premul());
     }
 
     pub fn begin_frame(&mut self) {
@@ -176,7 +176,7 @@ impl<'g> PathBuilder<'g> {
             let inner = (curr - 0.5 * normal).pixel_to_ndc(self.graphics.width, self.graphics.height);
             let outer = (curr + 0.5 * normal).pixel_to_ndc(self.graphics.width, self.graphics.height);
             self.graphics.vertices.push(Vertex { pos: [inner.x, inner.y, 0.0], col: [1.0, 1.0, 1.0, 1.0] });
-            self.graphics.vertices.push(Vertex { pos: [outer.x, outer.y, 0.0], col: [1.0, 1.0, 1.0, 0.0] });
+            self.graphics.vertices.push(Vertex { pos: [outer.x, outer.y, 0.0], col: [0.0, 0.0, 0.0, 0.0] });
         }
         for i in 1..(self.points.len().saturating_sub(1) as u16) {
             self.graphics.indices.extend_from_slice(&[start, start + 2 * i, start + 2 * (i + 1)]);
@@ -200,8 +200,13 @@ impl Color {
         Color { r, g, b, a }
     }
 
-    fn to_linear(&self) -> [f32; 4] {
-        [srgb_to_linear(self.r), srgb_to_linear(self.g), srgb_to_linear(self.b), self.a]
+    fn to_linear_premul(&self) -> [f32; 4] {
+        [
+            self.a * srgb_to_linear(self.r),
+            self.a * srgb_to_linear(self.g),
+            self.a * srgb_to_linear(self.b),
+            self.a
+        ]
     }
 }
 
