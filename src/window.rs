@@ -1,4 +1,4 @@
-use crate::graphics::{Graphics, Point};
+use crate::graphics::{Color, Graphics, Point};
 
 const FRAME: std::time::Duration = std::time::Duration::from_micros(1_000_000 / 60);
 
@@ -34,23 +34,23 @@ impl Window {
             now = std::time::Instant::now();
             fps_counter.update(elapsed);
 
-            unsafe {
-                gl::ClearColor(0.0, 0.0, 0.0, 1.0);
-                gl::Clear(gl::COLOR_BUFFER_BIT);
-            }
-
+            self.graphics.clear(Color::rgba(0.1, 0.15, 0.2, 1.0));
             self.graphics.begin_frame();
+            self.graphics.color(Color::rgba(1.0, 1.0, 1.0, 1.0));
             self.graphics.fill_rect(Point::new(0.0, 0.0), Point::new(10.0, 10.0));
+            self.graphics.color(Color::rgba(0.5, 0.25, 1.0, 0.75));
             self.graphics.path()
                 .move_to(Point::new(400.0, 300.0))
                 .quadratic_to(Point::new(500.0, 200.0), Point::new(400.0, 100.0))
                 .cubic_to(Point::new(350.0, 150.0), Point::new(100.0, 250.0), Point::new(400.0, 300.0))
                 .fill_convex();
+            self.graphics.color(Color::rgba(0.0, 0.5, 1.0, 0.5));
             self.graphics.path()
                 .move_to(Point::new(600.0, 300.0))
                 .arc_to(50.0, Point::new(600.0, 400.0))
                 .arc_to(50.0, Point::new(600.0, 300.0))
                 .fill_convex();
+            self.graphics.color(Color::rgba(0.8, 0.5, 0.0, 1.0));
             self.graphics.fill_round_rect(Point::new(100.0, 10.0), Point::new(100.0, 100.0), 20.0);
             self.graphics.end_frame();
 

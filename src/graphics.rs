@@ -6,6 +6,7 @@ pub struct Graphics {
     renderer: Renderer,
     width: f32,
     height: f32,
+    color: Color,
     vertices: Vec<Vertex>,
     indices: Vec<u16>,
 }
@@ -16,6 +17,7 @@ impl Graphics {
             renderer: Renderer::new(),
             width,
             height,
+            color: Color::rgba(1.0, 1.0, 1.0, 1.0),
             vertices: Vec::new(),
             indices: Vec::new(),
         }
@@ -37,6 +39,10 @@ impl Graphics {
 
     pub fn end_frame(&mut self) {
         self.renderer.draw(&self.vertices, &self.indices);
+    }
+
+    pub fn color(&mut self, color: Color) {
+        self.color = color;
     }
 
     pub fn path(&mut self) -> PathBuilder {
@@ -175,7 +181,8 @@ impl<'g> PathBuilder<'g> {
             let normal = Point::new(-tangent.y, tangent.x).normalized();
             let inner = (curr - 0.5 * normal).pixel_to_ndc(self.graphics.width, self.graphics.height);
             let outer = (curr + 0.5 * normal).pixel_to_ndc(self.graphics.width, self.graphics.height);
-            self.graphics.vertices.push(Vertex { pos: [inner.x, inner.y, 0.0], col: [1.0, 1.0, 1.0, 1.0] });
+            let color = self.graphics.color.to_linear_premul();
+            self.graphics.vertices.push(Vertex { pos: [inner.x, inner.y, 0.0], col: color });
             self.graphics.vertices.push(Vertex { pos: [outer.x, outer.y, 0.0], col: [0.0, 0.0, 0.0, 0.0] });
         }
         for i in 1..(self.points.len().saturating_sub(1) as u16) {
