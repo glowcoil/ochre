@@ -41,48 +41,37 @@ impl Graphics {
         self.renderer.draw(&self.vertices, &self.indices);
     }
 
-    pub fn color(&mut self, color: Color) {
+    pub fn set_color(&mut self, color: Color) {
         self.color = color;
     }
 
-    pub fn path(&mut self) -> PathBuilder {
-        PathBuilder::new(self)
-    }
-
-    pub fn fill_rect(&mut self, pos: Point, size: Point) {
-        self.path()
-            .move_to(pos)
-            .line_to(Point::new(pos.x, pos.y + size.y))
-            .line_to(Point::new(pos.x + size.x, pos.y + size.y))
-            .line_to(Point::new(pos.x + size.x, pos.y))
-            .fill_convex();
-    }
-
-    pub fn fill_round_rect(&mut self, pos: Point, size: Point, radius: f32) {
-        let radius = radius.min(0.5 * size.x).min(0.5 * size.y);
-        self.path()
-            .move_to(Point::new(pos.x, pos.y + radius))
-            .line_to(Point::new(pos.x, pos.y + size.y - radius))
-            .arc_to(radius, Point::new(pos.x + radius, pos.y + size.y))
-            .line_to(Point::new(pos.x + size.x - radius, pos.y + size.y))
-            .arc_to(radius, Point::new(pos.x + size.x, pos.y + size.y - radius))
-            .line_to(Point::new(pos.x + size.x, pos.y + radius))
-            .arc_to(radius, Point::new(pos.x + size.x - radius, pos.y))
-            .line_to(Point::new(pos.x + radius, pos.y))
-            .arc_to(radius, Point::new(pos.x, pos.y + radius))
-            .fill_convex();
+    pub fn draw_mesh(&mut self, mesh: &Mesh) {
+        let base = self.vertices.len() as u16;
+        for point in &mesh.vertices[0..mesh.fringe_vertices] {
+            let ndc = point.pixel_to_ndc(self.width, self.height);
+            self.vertices.push(Vertex { pos: [ndc.x, ndc.y, 0.0], col: self.color.to_linear_premul() });
+        }
+        for point in &mesh.vertices[mesh.fringe_vertices..] {
+            let ndc = point.pixel_to_ndc(self.width, self.height);
+            self.vertices.push(Vertex { pos: [ndc.x, ndc.y, 0.0], col: [0.0, 0.0, 0.0, 0.0] });
+        }
+        for index in &mesh.indices {
+            self.indices.push(base + index);
+        }
     }
 }
 
-pub struct PathBuilder<'g> {
-    graphics: &'g mut Graphics,
+pub struct Path {
     points: Vec<Point>,
     components: Vec<usize>,
 }
 
-impl<'g> PathBuilder<'g> {
-    fn new(graphics: &'g mut Graphics) -> PathBuilder<'g> {
-        PathBuilder { graphics, points: vec![Point::new(0.0, 0.0)], components: vec![0] }
+impl Path {
+    pub fn new() -> Path {
+        Path {
+            points: vec![Point::new(0.0, 0.0)],
+            components: vec![0],
+        }
     }
 
     pub fn move_to(&mut self, point: Point) -> &mut Self {
@@ -166,9 +155,16 @@ impl<'g> PathBuilder<'g> {
         self
     }
 
-    pub fn fill_convex(&mut self) {
-        if self.points.len() < 3 { return; }
-        let start = self.graphics.vertices.len() as u16;
+    pub fn fill_convex(mut self) -> Mesh {
+        if self.points.len() < 3 {
+            return Mesh {
+                vertices: Vec::new(),
+                indices: Vec::new(),
+                fringe_vertices: 0,
+                fringe_indices: 0
+            };
+        }
+        let num_points = self.points.len() as u16;
         for i in 0..self.points.len() {
             let prev = self.points[(i + self.points.len() - 1) % self.points.len()];
             let curr = self.points[i];
@@ -177,22 +173,66 @@ impl<'g> PathBuilder<'g> {
             let next_tangent = next - curr;
             let tangent = prev_tangent + next_tangent;
             let normal = Point::new(-tangent.y, tangent.x).normalized();
-            let inner = (curr - 0.5 * normal).pixel_to_ndc(self.graphics.width, self.graphics.height);
-            let outer = (curr + 0.5 * normal).pixel_to_ndc(self.graphics.width, self.graphics.height);
-            let color = self.graphics.color.to_linear_premul();
-            self.graphics.vertices.push(Vertex { pos: [inner.x, inner.y, 0.0], col: color });
-            self.graphics.vertices.push(Vertex { pos: [outer.x, outer.y, 0.0], col: [0.0, 0.0, 0.0, 0.0] });
+            self.points[i] = curr - 0.5 * normal;
+            self.points.push(curr + 0.5 * normal);
         }
-        for i in 1..(self.points.len().saturating_sub(1) as u16) {
-            self.graphics.indices.extend_from_slice(&[start, start + 2 * i, start + 2 * (i + 1)]);
+        let mut indices = Vec::new();
+        for i in 1..(num_points.saturating_sub(1) as u16) {
+            indices.extend_from_slice(&[0, i, i + 1]);
         }
-        for i in 0..(self.points.len() as u16) {
-            self.graphics.indices.extend_from_slice(&[
-                start + 2 * i, start + 2 * i + 1, start + 2 * ((i + 1) % self.points.len() as u16) + 1,
-                start + 2 * i, start + 2 * ((i + 1) % self.points.len() as u16) + 1, start + 2 * ((i + 1) % self.points.len() as u16),
+        let fringe_indices = indices.len();
+        for i in 0..(num_points as u16) {
+            indices.extend_from_slice(&[
+                i, num_points + i, num_points + ((i + 1) % num_points),
+                i, num_points + ((i + 1) % num_points), ((i + 1) % num_points),
             ]);
         }
+        Mesh {
+            vertices: self.points,
+            indices,
+            fringe_vertices: num_points as usize,
+            fringe_indices,
+        }
     }
+
+    pub fn rect(pos: Point, size: Point) -> Path {
+        let mut path = Path::new();
+        path.move_to(pos)
+            .line_to(Point::new(pos.x, pos.y + size.y))
+            .line_to(Point::new(pos.x + size.x, pos.y + size.y))
+            .line_to(Point::new(pos.x + size.x, pos.y));
+        path
+    }
+
+    pub fn rect_fill(pos: Point, size: Point) -> Mesh {
+        Path::rect(pos, size).fill_convex()
+    }
+
+    pub fn round_rect(pos: Point, size: Point, radius: f32) -> Path {
+        let radius = radius.min(0.5 * size.x).min(0.5 * size.y);
+        let mut path = Path::new();
+        path.move_to(Point::new(pos.x, pos.y + radius))
+            .line_to(Point::new(pos.x, pos.y + size.y - radius))
+            .arc_to(radius, Point::new(pos.x + radius, pos.y + size.y))
+            .line_to(Point::new(pos.x + size.x - radius, pos.y + size.y))
+            .arc_to(radius, Point::new(pos.x + size.x, pos.y + size.y - radius))
+            .line_to(Point::new(pos.x + size.x, pos.y + radius))
+            .arc_to(radius, Point::new(pos.x + size.x - radius, pos.y))
+            .line_to(Point::new(pos.x + radius, pos.y))
+            .arc_to(radius, Point::new(pos.x, pos.y + radius));
+        path
+    }
+
+    pub fn round_rect_fill(pos: Point, size: Point, radius: f32) -> Mesh {
+        Path::round_rect(pos, size, radius).fill_convex()
+    }
+}
+
+pub struct Mesh {
+    vertices: Vec<Point>,
+    indices: Vec<u16>,
+    fringe_vertices: usize,
+    fringe_indices: usize,
 }
 
 #[derive(Copy, Clone)]
