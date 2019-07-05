@@ -78,54 +78,54 @@ pub struct PathBuilder<'g> {
     graphics: &'g mut Graphics,
     points: Vec<Point>,
     components: Vec<usize>,
-    cursor: Point,
 }
 
 impl<'g> PathBuilder<'g> {
     fn new(graphics: &'g mut Graphics) -> PathBuilder<'g> {
-        PathBuilder { graphics, points: Vec::new(), components: vec![0], cursor: Point::new(0.0, 0.0) }
+        PathBuilder { graphics, points: vec![Point::new(0.0, 0.0)], components: vec![0] }
     }
 
     pub fn move_to(&mut self, point: Point) -> &mut Self {
-        if *self.components.last().unwrap() != self.points.len() {
-            self.points.push(self.cursor);
+        if *self.components.last().unwrap() == self.points.len() - 1 {
+            *self.points.last_mut().unwrap() = point;
+        } else {
             self.components.push(self.points.len());
+            self.points.push(point);
         }
-        self.cursor = point;
         self
     }
 
     pub fn line_to(&mut self, point: Point) -> &mut Self {
-        self.points.push(self.cursor);
-        self.cursor = point;
+        self.points.push(point);
         self
     }
 
     pub fn quadratic_to(&mut self, control: Point, point: Point) -> &mut Self {
-        let a_x = self.cursor.x - 2.0 * control.x + point.x;
-        let a_y = self.cursor.y - 2.0 * control.y + point.y;
-        let dt = ((4.0 * TOLERANCE) / (a_x * a_x + a_y * a_y)).sqrt();
-        let mut t = 0.0;
+        let current = *self.points.last().unwrap();
+        let a_x = current.x - 2.0 * control.x + point.x;
+        let a_y = current.y - 2.0 * control.y + point.y;
+        let dt = 10.0 * ((4.0 * TOLERANCE) / (a_x * a_x + a_y * a_y)).sqrt();
+        let mut t = dt;
         while t < 1.0 {
-            let p12 = Point::lerp(t, self.cursor, control);
+            let p12 = Point::lerp(t, current, control);
             let p23 = Point::lerp(t, control, point);
             self.points.push(Point::lerp(t, p12, p23));
             t += dt;
         }
-        self.cursor = point;
         self
     }
 
     pub fn cubic_to(&mut self, control1: Point, control2: Point, point: Point) -> &mut Self {
-        let a_x = -self.cursor.x + 3.0 * control1.x - 3.0 * control2.x + point.x;
-        let b_x = 3.0 * (self.cursor.x - 2.0 * control1.x + control2.x);
-        let a_y = -self.cursor.y + 3.0 * control1.y - 3.0 * control2.y + point.y;
-        let b_y = 3.0 * (self.cursor.y - 2.0 * control1.y + control2.y);
+        let current = *self.points.last().unwrap();
+        let a_x = -current.x + 3.0 * control1.x - 3.0 * control2.x + point.x;
+        let b_x = 3.0 * (current.x - 2.0 * control1.x + control2.x);
+        let a_y = -current.y + 3.0 * control1.y - 3.0 * control2.y + point.y;
+        let b_y = 3.0 * (current.y - 2.0 * control1.y + control2.y);
         let conc = (b_x * b_x + b_y * b_y).max((a_x + b_x) * (a_x + b_x) + (a_y + b_y) * (a_y + b_y));
-        let dt = ((4.0 * TOLERANCE) / conc).sqrt();
-        let mut t = 0.0;
+        let dt = 10.0 * ((4.0 * TOLERANCE) / conc).sqrt();
+        let mut t = dt;
         while t < 1.0 {
-            let p12 = Point::lerp(t, self.cursor, control1);
+            let p12 = Point::lerp(t, current, control1);
             let p23 = Point::lerp(t, control1, control2);
             let p34 = Point::lerp(t, control2, point);
             let p123 = Point::lerp(t, p12, p23);
@@ -133,13 +133,13 @@ impl<'g> PathBuilder<'g> {
             self.points.push(Point::lerp(t, p123, p234));
             t += dt;
         }
-        self.cursor = point;
         self
     }
 
     pub fn arc_to(&mut self, radius: f32, point: Point) -> &mut Self {
+        let current = *self.points.last().unwrap();
         let winding = radius.signum();
-        let to_midpoint = 0.5 * (point - self.cursor);
+        let to_midpoint = 0.5 * (point - current);
         let dist_to_midpoint = to_midpoint.length();
         let radius = radius.abs().max(to_midpoint.length());
         let dist_to_center = (radius * radius - dist_to_midpoint * dist_to_midpoint).sqrt();
@@ -148,27 +148,25 @@ impl<'g> PathBuilder<'g> {
         } else {
             Point::new(to_midpoint.y, -to_midpoint.x).normalized()
         };
-        let center = self.cursor + to_midpoint + to_center;
-        let mut angle = self.cursor - center;
+        let center = current + to_midpoint + to_center;
+        let mut angle = current - center;
         let end_angle = point - center;
         let rotor_x = (1.0 - 2.0 * (TOLERANCE / radius)).max(0.0);
         let rotor_y = -winding * (1.0 - rotor_x * rotor_x).sqrt();
         loop {
-            self.points.push(center + angle);
             let prev_sign = winding * (angle.x * end_angle.y - angle.y * end_angle.x);
             angle = Point::new(rotor_x * angle.x - rotor_y * angle.y, rotor_x * angle.y + rotor_y * angle.x);
             let sign = winding * (angle.x * end_angle.y - angle.y * end_angle.x);
             if prev_sign <= 0.0 && sign >= 0.0 {
                 break;
             }
+            self.points.push(center + angle);
         }
-        self.cursor = point;
+        self.points.push(point);
         self
     }
 
     pub fn fill_convex(&mut self) {
-        self.points.push(self.cursor);
-        let mut i = 1;
         if self.points.len() < 3 { return; }
         let start = self.graphics.vertices.len() as u16;
         for i in 0..self.points.len() {
