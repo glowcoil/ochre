@@ -1,4 +1,4 @@
-use crate::render::{Renderer, Vertex};
+use crate::render::{Renderer, TextureFormat, TextureId, Vertex, VertexUV};
 
 const TOLERANCE: f32 = 0.1;
 
@@ -58,6 +58,21 @@ impl Graphics {
         for index in &mesh.indices {
             self.indices.push(base + index);
         }
+    }
+
+    pub fn draw_texture_test(&mut self) {
+        let tex = self.renderer.create_texture(TextureFormat::A, 4, 4, &[
+            127, 0, 127, 0,
+            0, 127, 0, 127,
+            127, 0, 127, 0,
+            0, 127, 0, 127,
+        ]);
+        self.renderer.draw_textured(&[
+            VertexUV { pos: [0.0, 0.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [0.0, 0.0] },
+            VertexUV { pos: [1.0, 0.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [1.0, 0.0] },
+            VertexUV { pos: [1.0, 1.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [1.0, 1.0] },
+            VertexUV { pos: [0.0, 1.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [0.0, 1.0] },
+        ], &[0, 1, 2, 0, 2, 3], tex);
     }
 }
 

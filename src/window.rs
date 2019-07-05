@@ -55,6 +55,7 @@ impl Window {
             let round_rect = Path::round_rect_fill(Point::new(100.0, 10.0), Point::new(100.0, 100.0), 20.0);
             self.graphics.draw_mesh(&round_rect);
             self.graphics.end_frame();
+            self.graphics.draw_texture_test();
 
             self.context.swap_buffers().unwrap();
 

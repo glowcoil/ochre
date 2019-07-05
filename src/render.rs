@@ -30,6 +30,66 @@ void main() {
     f_col = v_col;
 }
 \0";
+const VERT_TEX_RGBA: &[u8] = b"
+#version 330
+
+layout(location = 0) in vec3 pos;
+layout(location = 1) in vec4 col;
+layout(location = 2) in vec2 uv;
+
+out vec2 v_uv;
+out vec4 v_col;
+
+void main() {
+    gl_Position = vec4(pos, 1.0);
+    v_uv = uv;
+    v_col = col;
+}
+\0";
+const FRAG_TEX_RGBA: &[u8] = b"
+#version 330
+
+uniform sampler2D tex;
+
+in vec2 v_uv;
+in vec4 v_col;
+
+out vec4 f_col;
+
+void main() {
+    f_col = v_col * texture(tex, v_uv).rgba;
+}
+\0";
+const VERT_TEX_A: &[u8] = b"
+#version 330
+
+layout(location = 0) in vec3 pos;
+layout(location = 1) in vec4 col;
+layout(location = 2) in vec2 uv;
+
+out vec4 v_col;
+out vec2 v_uv;
+
+void main() {
+    gl_Position = vec4(pos, 1.0);
+    v_uv = uv;
+    v_col = col;
+}
+\0";
+const FRAG_TEX_A: &[u8] = b"
+#version 330
+
+uniform sampler2D tex;
+
+in vec4 v_col;
+in vec2 v_uv;
+
+out vec4 f_col;
+
+void main() {
+    f_col = v_col * texture(tex, v_uv).r;
+}
+\0";
 
 #[derive(Copy, Clone, Debug)]
 pub struct Vertex {
@@ -37,11 +97,20 @@ pub struct Vertex {
     pub col: [f32; 4],
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct VertexUV {
+    pub pos: [f32; 3],
+    pub col: [f32; 4],
+    pub uv: [f32; 2],
+}
+
 pub enum TextureFormat { RGBA, A }
 pub type TextureId = usize;
 
 pub struct Renderer {
     prog: Program,
+    prog_tex_rgba: Program,
+    prog_tex_a: Program,
     textures: HashMap<TextureId, Texture>,
     texture_id: TextureId,
 }
@@ -51,6 +120,12 @@ impl Renderer {
         let prog = Program::new(
             &CStr::from_bytes_with_nul(VERT).unwrap(),
             &CStr::from_bytes_with_nul(FRAG).unwrap()).unwrap();
+        let prog_tex_rgba = Program::new(
+            &CStr::from_bytes_with_nul(VERT_TEX_RGBA).unwrap(),
+            &CStr::from_bytes_with_nul(FRAG_TEX_RGBA).unwrap()).unwrap();
+        let prog_tex_a = Program::new(
+            &CStr::from_bytes_with_nul(VERT_TEX_A).unwrap(),
+            &CStr::from_bytes_with_nul(FRAG_TEX_A).unwrap()).unwrap();
 
         unsafe {
             gl::BlendFunc(gl::ONE, gl::ONE_MINUS_SRC_ALPHA);
@@ -60,6 +135,8 @@ impl Renderer {
 
         Renderer {
             prog,
+            prog_tex_rgba,
+            prog_tex_a,
             textures: HashMap::new(),
             texture_id: 0,
         }
@@ -99,8 +176,48 @@ impl Renderer {
 
             gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_SHORT, 0 as *const gl::types::GLvoid);
 
-            gl::DisableVertexAttribArray(0);
-            gl::DisableVertexAttribArray(1);
+            gl::DeleteVertexArrays(1, &vao);
+            gl::DeleteBuffers(1, &ibo);
+            gl::DeleteBuffers(1, &vbo);
+        }
+    }
+
+    pub fn draw_textured(&mut self, vertices: &[VertexUV], indices: &[u16], texture: TextureId) {
+        let texture = self.textures.get(&texture).unwrap();
+        unsafe {
+            let mut vbo: u32 = 0;
+            gl::GenBuffers(1, &mut vbo);
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+            gl::BufferData(gl::ARRAY_BUFFER, (vertices.len() * std::mem::size_of::<VertexUV>()) as isize, vertices.as_ptr() as *const std::ffi::c_void, gl::STATIC_DRAW);
+
+            let mut ibo: u32 = 0;
+            gl::GenBuffers(1, &mut ibo);
+            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ibo);
+            gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, (indices.len() * std::mem::size_of::<u16>()) as isize, indices.as_ptr() as *const std::ffi::c_void, gl::STATIC_DRAW);
+
+            let mut vao: u32 = 0;
+            gl::GenVertexArrays(1, &mut vao);
+            gl::BindVertexArray(vao);
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ibo);
+
+            gl::EnableVertexAttribArray(0);
+            gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, std::mem::size_of::<VertexUV>() as GLint, offset!(VertexUV, pos) as *const gl::types::GLvoid);
+            gl::EnableVertexAttribArray(1);
+            gl::VertexAttribPointer(1, 4, gl::FLOAT, gl::FALSE, std::mem::size_of::<VertexUV>() as GLint, offset!(VertexUV, col) as *const gl::types::GLvoid);
+            gl::EnableVertexAttribArray(2);
+            gl::VertexAttribPointer(2, 2, gl::FLOAT, gl::FALSE, std::mem::size_of::<VertexUV>() as GLint, offset!(VertexUV, uv) as *const gl::types::GLvoid);
+
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, texture.id);
+
+            match texture.format {
+                TextureFormat::RGBA => { gl::UseProgram(self.prog_tex_rgba.id); }
+                TextureFormat::A => { gl::UseProgram(self.prog_tex_a.id); }
+            }
+            gl::Uniform1i(0, 0);
+
+            gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_SHORT, 0 as *const gl::types::GLvoid);
 
             gl::DeleteVertexArrays(1, &vao);
             gl::DeleteBuffers(1, &ibo);
