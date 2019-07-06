@@ -108,14 +108,14 @@ impl Renderer {
         }
     }
 
-    pub fn create_texture(&mut self, format: TextureFormat, width: usize, height: usize, pixels: &[u8]) -> TextureId {
+    pub fn create_texture(&mut self, format: TextureFormat, width: u32, height: u32, pixels: &[u8]) -> TextureId {
         let id = self.texture_id;
         self.textures.insert(id, Texture::new(format, width, height, pixels));
         self.texture_id += 1;
         id
     }
 
-    pub fn update_texture(&mut self, texture: TextureId, x: usize, y: usize, width: usize, height: usize, pixels: &[u8]) {
+    pub fn update_texture(&mut self, texture: TextureId, x: u32, y: u32, width: u32, height: u32, pixels: &[u8]) {
         self.textures.get_mut(&texture).unwrap().update(x, y, width, height, pixels);
     }
 
@@ -191,7 +191,7 @@ struct Texture {
 }
 
 impl Texture {
-    fn new(format: TextureFormat, width: usize, height: usize, pixels: &[u8]) -> Texture {
+    fn new(format: TextureFormat, width: u32, height: u32, pixels: &[u8]) -> Texture {
         let flipped = flip(pixels, width);
         let mut id: GLuint = 0;
         unsafe {
@@ -199,12 +199,12 @@ impl Texture {
             gl::BindTexture(gl::TEXTURE_2D, id);
             match format {
                 TextureFormat::RGBA => {
-                    assert!(flipped.len() == width * height * 4);
+                    assert!(flipped.len() as u32 == width * height * 4);
                     gl::PixelStorei(gl::UNPACK_ALIGNMENT, 4);
                     gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RGBA32UI as GLint, width as i32, height as i32, 0, gl::RGBA, gl::UNSIGNED_INT_8_8_8_8, flipped.as_ptr() as *const std::ffi::c_void);
                 }
                 TextureFormat::A => {
-                    assert!(flipped.len() == width * height);
+                    assert!(flipped.len() as u32 == width * height);
                     gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
                     gl::TexImage2D(gl::TEXTURE_2D, 0, gl::R8 as GLint, width as i32, height as i32, 0, gl::RED, gl::UNSIGNED_BYTE, flipped.as_ptr() as *const std::ffi::c_void);
                 }
@@ -215,19 +215,19 @@ impl Texture {
         Texture { format, id }
     }
 
-    fn update(&mut self, x: usize, y: usize, width: usize, height: usize, pixels: &[u8]) {
+    fn update(&mut self, x: u32, y: u32, width: u32, height: u32, pixels: &[u8]) {
         let flipped = flip(pixels, width);
         unsafe { gl::BindTexture(gl::TEXTURE_2D, self.id); }
         match self.format {
             TextureFormat::RGBA => {
-                if flipped.len() != width * height * 4 { panic!() }
+                if flipped.len() as u32 != width * height * 4 { panic!() }
                 unsafe {
                     gl::PixelStorei(gl::UNPACK_ALIGNMENT, 4);
                     gl::TexSubImage2D(gl::TEXTURE_2D, 0, x as i32, y as i32, width as i32, height as i32, gl::RGBA, gl::UNSIGNED_INT_8_8_8_8, flipped.as_ptr() as *const std::ffi::c_void);
                 }
             }
             TextureFormat::A => {
-                if flipped.len() != width * height { panic!() }
+                if flipped.len() as u32 != width * height { panic!() }
                 unsafe {
                     gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
                     gl::TexSubImage2D(gl::TEXTURE_2D, 0, x as i32, y as i32, width as i32, height as i32, gl::RED, gl::UNSIGNED_BYTE, flipped.as_ptr() as *const std::ffi::c_void);
@@ -243,9 +243,9 @@ impl Drop for Texture {
     }
 }
 
-fn flip(pixels: &[u8], width: usize) -> Vec<u8> {
+fn flip(pixels: &[u8], width: u32) -> Vec<u8> {
     let mut flipped: Vec<u8> = Vec::with_capacity(pixels.len());
-    for chunk in pixels.rchunks(width) {
+    for chunk in pixels.rchunks(width as usize) {
         flipped.extend(chunk);
     }
     flipped
