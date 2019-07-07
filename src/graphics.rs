@@ -93,7 +93,7 @@ impl Path {
         let current = *self.points.last().unwrap();
         let a_x = current.x - 2.0 * control.x + point.x;
         let a_y = current.y - 2.0 * control.y + point.y;
-        let dt = 10.0 * ((4.0 * TOLERANCE) / (a_x * a_x + a_y * a_y)).sqrt();
+        let dt = ((8.0 * TOLERANCE * TOLERANCE) / (a_x * a_x + a_y * a_y)).sqrt().sqrt();
         let mut t = dt;
         while t < 1.0 {
             let p12 = Point::lerp(t, current, control);
@@ -111,7 +111,7 @@ impl Path {
         let a_y = -current.y + 3.0 * control1.y - 3.0 * control2.y + point.y;
         let b_y = 3.0 * (current.y - 2.0 * control1.y + control2.y);
         let conc = (b_x * b_x + b_y * b_y).max((a_x + b_x) * (a_x + b_x) + (a_y + b_y) * (a_y + b_y));
-        let dt = 10.0 * ((4.0 * TOLERANCE) / conc).sqrt();
+        let dt = ((8.0 * TOLERANCE * TOLERANCE) / conc).sqrt().sqrt();
         let mut t = dt;
         while t < 1.0 {
             let p12 = Point::lerp(t, current, control1);
