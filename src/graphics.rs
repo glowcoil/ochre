@@ -9,27 +9,33 @@ pub struct Graphics {
     color: Color,
     vertices: Vec<Vertex>,
     indices: Vec<u16>,
+    tex: TextureId,
 }
 
 impl Graphics {
     pub fn new(width: f32, height: f32) -> Graphics {
+        let mut renderer = Renderer::new(width as u32, height as u32);
+        let tex = renderer.create_texture(TextureFormat::RGBA, 1024, 1024, &vec![0; 1024 * 1024 * 4]);
         Graphics {
-            renderer: Renderer::new(),
+            renderer,
             width,
             height,
             color: Color::rgba(1.0, 1.0, 1.0, 1.0),
             vertices: Vec::new(),
             indices: Vec::new(),
+            tex,
         }
     }
 
     pub fn set_size(&mut self, width: f32, height: f32) {
         self.width = width;
         self.height = height;
+
+        self.renderer.resize(width as u32, height as u32);
     }
 
     pub fn clear(&mut self, color: Color) {
-        self.renderer.clear(color.to_linear_premul());
+        self.renderer.clear(color.to_linear_premul(), &RenderOptions::default());
     }
 
     pub fn begin_frame(&mut self) {
@@ -38,7 +44,7 @@ impl Graphics {
     }
 
     pub fn end_frame(&mut self) {
-        self.renderer.draw(&self.vertices, &self.indices);
+        self.renderer.draw(&self.vertices, &self.indices, &RenderOptions::default());
     }
 
     pub fn set_color(&mut self, color: Color) {
@@ -72,7 +78,13 @@ impl Graphics {
             TexturedVertex { pos: [1.0, 0.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [1.0, 0.0] },
             TexturedVertex { pos: [1.0, 1.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [1.0, 1.0] },
             TexturedVertex { pos: [0.0, 1.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [0.0, 1.0] },
-        ], &[0, 1, 2, 0, 2, 3], tex);
+        ], &[0, 1, 2, 0, 2, 3], tex, &RenderOptions { target: Some(self.tex), ..RenderOptions::default() });
+        self.renderer.draw_textured(&[
+            TexturedVertex { pos: [0.0, 0.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [0.0, 0.0] },
+            TexturedVertex { pos: [1.0, 0.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [1.0, 0.0] },
+            TexturedVertex { pos: [1.0, 1.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [1.0, 1.0] },
+            TexturedVertex { pos: [0.0, 1.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [0.0, 1.0] },
+        ], &[0, 1, 2, 0, 2, 3], self.tex, &RenderOptions::default());
     }
 }
 

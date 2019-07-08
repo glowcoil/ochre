@@ -22,7 +22,20 @@ pub struct TexturedVertex {
 pub enum TextureFormat { RGBA, A }
 pub type TextureId = usize;
 
+pub struct RenderOptions {
+    pub target: Option<TextureId>,
+}
+
+impl Default for RenderOptions {
+    fn default() -> RenderOptions {
+        RenderOptions { target: None }
+    }
+}
+
 pub struct Renderer {
+    width: u32,
+    height: u32,
+
     prog: Program,
     prog_tex_rgba: Program,
     prog_tex_a: Program,
@@ -31,7 +44,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new() -> Renderer {
+    pub fn new(width: u32, height: u32) -> Renderer {
         let prog = Program::new(
             &CStr::from_bytes_with_nul(VERT).unwrap(),
             &CStr::from_bytes_with_nul(FRAG).unwrap()).unwrap();
@@ -49,6 +62,9 @@ impl Renderer {
         }
 
         Renderer {
+            width,
+            height,
+
             prog,
             prog_tex_rgba,
             prog_tex_a,
@@ -57,22 +73,32 @@ impl Renderer {
         }
     }
 
-    pub fn clear(&mut self, col: [f32; 4]) {
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.width = width;
+        self.height = height;
+    }
+
+    pub fn clear(&mut self, col: [f32; 4], options: &RenderOptions) {
+        self.apply_options(options);
         unsafe {
             gl::ClearColor(col[0], col[1], col[2], col[3]);
             gl::Clear(gl::COLOR_BUFFER_BIT);
         }
+        self.unapply_options(options);
     }
 
-    pub fn draw(&mut self, vertices: &[Vertex], indices: &[u16]) {
+    pub fn draw(&mut self, vertices: &[Vertex], indices: &[u16], options: &RenderOptions) {
+        self.apply_options(options);
         let vertex_array = VertexArray::new(vertices, indices);
         unsafe {
             gl::UseProgram(self.prog.id);
             gl::DrawElements(gl::TRIANGLES, vertex_array.count, gl::UNSIGNED_SHORT, 0 as *const GLvoid);
         }
+        self.unapply_options(options);
     }
 
-    pub fn draw_textured(&mut self, vertices: &[TexturedVertex], indices: &[u16], texture: TextureId) {
+    pub fn draw_textured(&mut self, vertices: &[TexturedVertex], indices: &[u16], texture: TextureId, options: &RenderOptions) {
+        self.apply_options(options);
         let texture = self.textures.get(&texture).unwrap();
         let vertex_array = VertexArray::new(vertices, indices);
         unsafe {
@@ -85,6 +111,7 @@ impl Renderer {
             gl::Uniform1i(0, 0);
             gl::DrawElements(gl::TRIANGLES, vertex_array.count, gl::UNSIGNED_SHORT, 0 as *const GLvoid);
         }
+        self.unapply_options(options);
     }
 
     pub fn create_texture(&mut self, format: TextureFormat, width: u32, height: u32, pixels: &[u8]) -> TextureId {
@@ -100,6 +127,28 @@ impl Renderer {
 
     pub fn delete_texture(&mut self, texture: TextureId) {
         self.textures.remove(&texture);
+    }
+
+    fn apply_options(&mut self, options: &RenderOptions) {
+        if let Some(target) = options.target {
+            let texture = self.textures.get_mut(&target).unwrap();
+            if texture.framebuffer.is_none() {
+                texture.framebuffer = Some(Framebuffer::new(texture.id));
+            }
+            unsafe {
+                gl::Viewport(0, 0, texture.width as GLint, texture.height as GLint);
+                gl::BindFramebuffer(gl::FRAMEBUFFER, texture.framebuffer.as_ref().unwrap().id);
+            }
+        }
+    }
+
+    fn unapply_options(&mut self, options: &RenderOptions) {
+        if let Some(target) = options.target {
+            unsafe {
+                gl::Viewport(0, 0, self.width as GLint, self.height as GLint);
+                gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+            }
+        }
     }
 }
 
@@ -230,8 +279,11 @@ impl<V> Drop for VertexArray<V> {
 }
 
 struct Texture {
-    format: TextureFormat,
     id: GLuint,
+    format: TextureFormat,
+    width: u32,
+    height: u32,
+    framebuffer: Option<Framebuffer>,
 }
 
 impl Texture {
@@ -245,7 +297,7 @@ impl Texture {
                 TextureFormat::RGBA => {
                     assert!(flipped.len() as u32 == width * height * 4);
                     gl::PixelStorei(gl::UNPACK_ALIGNMENT, 4);
-                    gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RGBA32UI as GLint, width as i32, height as i32, 0, gl::RGBA, gl::UNSIGNED_INT_8_8_8_8, flipped.as_ptr() as *const std::ffi::c_void);
+                    gl::TexImage2D(gl::TEXTURE_2D, 0, gl::SRGB8_ALPHA8 as GLint, width as i32, height as i32, 0, gl::RGBA, gl::UNSIGNED_INT_8_8_8_8, flipped.as_ptr() as *const std::ffi::c_void);
                 }
                 TextureFormat::A => {
                     assert!(flipped.len() as u32 == width * height);
@@ -256,7 +308,7 @@ impl Texture {
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
         }
-        Texture { format, id }
+        Texture { id, format, width, height, framebuffer: None }
     }
 
     fn update(&mut self, x: u32, y: u32, width: u32, height: u32, pixels: &[u8]) {
@@ -293,6 +345,29 @@ fn flip(pixels: &[u8], width: u32) -> Vec<u8> {
         flipped.extend(chunk);
     }
     flipped
+}
+
+struct Framebuffer {
+    id: GLuint,
+}
+
+impl Framebuffer {
+    fn new(texture_id: GLuint) -> Framebuffer {
+        let mut id: GLuint = 0;
+        unsafe {
+            gl::GenFramebuffers(1, &mut id);
+            gl::BindFramebuffer(gl::FRAMEBUFFER, id);
+            gl::FramebufferTexture2D(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, gl::TEXTURE_2D, texture_id, 0);
+            gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+        }
+        Framebuffer { id }
+    }
+}
+
+impl Drop for Framebuffer {
+    fn drop(&mut self) {
+        unsafe { gl::DeleteFramebuffers(1, &self.id); }
+    }
 }
 
 const VERT: &[u8] = b"
@@ -346,7 +421,7 @@ in vec4 v_col;
 out vec4 f_col;
 
 void main() {
-    f_col = v_col * texture(tex, v_uv).rgba;
+    f_col = v_col * texture(tex, v_uv);
 }
 \0";
 const VERT_TEX_A: &[u8] = b"
