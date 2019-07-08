@@ -1,4 +1,4 @@
-use crate::render::{Renderer, TextureFormat, TextureId, Vertex, VertexUV};
+use crate::render::*;
 
 const TOLERANCE: f32 = 0.1;
 
@@ -68,10 +68,10 @@ impl Graphics {
             0, 127, 0, 127,
         ]);
         self.renderer.draw_textured(&[
-            VertexUV { pos: [0.0, 0.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [0.0, 0.0] },
-            VertexUV { pos: [1.0, 0.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [1.0, 0.0] },
-            VertexUV { pos: [1.0, 1.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [1.0, 1.0] },
-            VertexUV { pos: [0.0, 1.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [0.0, 1.0] },
+            TexturedVertex { pos: [0.0, 0.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [0.0, 0.0] },
+            TexturedVertex { pos: [1.0, 0.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [1.0, 0.0] },
+            TexturedVertex { pos: [1.0, 1.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [1.0, 1.0] },
+            TexturedVertex { pos: [0.0, 1.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [0.0, 1.0] },
         ], &[0, 1, 2, 0, 2, 3], tex);
     }
 }
