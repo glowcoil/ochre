@@ -56,6 +56,7 @@ impl Window {
             self.graphics.draw_mesh(&round_rect);
             self.graphics.end_frame();
             self.graphics.draw_texture_test();
+            self.graphics.draw_trapezoids_test();
 
             self.context.swap_buffers().unwrap();
 

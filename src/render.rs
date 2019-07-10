@@ -19,6 +19,13 @@ pub struct TexturedVertex {
     pub uv: [f32; 2],
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct TrapezoidVertex {
+    pub pos: [f32; 2],
+    pub from: [f32; 2],
+    pub to: [f32; 2],
+}
+
 pub enum TextureFormat { RGBA, A }
 pub type TextureId = usize;
 
@@ -39,6 +46,8 @@ pub struct Renderer {
     prog: Program,
     prog_tex_rgba: Program,
     prog_tex_a: Program,
+    prog_trapezoids: Program,
+
     textures: HashMap<TextureId, Texture>,
     texture_id: TextureId,
 }
@@ -54,6 +63,9 @@ impl Renderer {
         let prog_tex_a = Program::new(
             &CStr::from_bytes_with_nul(VERT_TEX_A).unwrap(),
             &CStr::from_bytes_with_nul(FRAG_TEX_A).unwrap()).unwrap();
+        let prog_trapezoids = Program::new(
+            &CStr::from_bytes_with_nul(VERT_TRAPEZOIDS).unwrap(),
+            &CStr::from_bytes_with_nul(FRAG_TRAPEZOIDS).unwrap()).unwrap();
 
         unsafe {
             gl::BlendFunc(gl::ONE, gl::ONE_MINUS_SRC_ALPHA);
@@ -68,6 +80,8 @@ impl Renderer {
             prog,
             prog_tex_rgba,
             prog_tex_a,
+            prog_trapezoids,
+
             textures: HashMap::new(),
             texture_id: 0,
         }
@@ -110,6 +124,18 @@ impl Renderer {
             }
             gl::Uniform1i(0, 0);
             gl::DrawElements(gl::TRIANGLES, vertex_array.count, gl::UNSIGNED_SHORT, 0 as *const GLvoid);
+        }
+        self.unapply_options(options);
+    }
+
+    pub fn draw_trapezoids(&mut self, vertices: &[TrapezoidVertex], indices: &[u16], options: &RenderOptions) {
+        self.apply_options(options);
+        let vertex_array = VertexArray::new(vertices, indices);
+        unsafe {
+            gl::BlendFunc(gl::ONE, gl::ONE);
+            gl::UseProgram(self.prog_trapezoids.id);
+            gl::DrawElements(gl::TRIANGLES, vertex_array.count, gl::UNSIGNED_SHORT, 0 as *const GLvoid);
+            gl::BlendFunc(gl::ONE, gl::ONE_MINUS_SRC_ALPHA);
         }
         self.unapply_options(options);
     }
@@ -237,6 +263,17 @@ impl VertexAttribs for TexturedVertex {
     }
 }
 
+impl VertexAttribs for TrapezoidVertex {
+    unsafe fn attribs() {
+        gl::EnableVertexAttribArray(0);
+        gl::VertexAttribPointer(0, 2, gl::FLOAT, gl::FALSE, std::mem::size_of::<TrapezoidVertex>() as GLint, offset!(TrapezoidVertex, pos) as *const GLvoid);
+        gl::EnableVertexAttribArray(1);
+        gl::VertexAttribPointer(1, 2, gl::FLOAT, gl::FALSE, std::mem::size_of::<TrapezoidVertex>() as GLint, offset!(TrapezoidVertex, from) as *const GLvoid);
+        gl::EnableVertexAttribArray(2);
+        gl::VertexAttribPointer(2, 2, gl::FLOAT, gl::FALSE, std::mem::size_of::<TrapezoidVertex>() as GLint, offset!(TrapezoidVertex, to) as *const GLvoid);
+    }
+}
+
 struct VertexArray<V> {
     vao: GLuint,
     vbo: GLuint,
@@ -302,7 +339,7 @@ impl Texture {
                 TextureFormat::A => {
                     assert!(flipped.len() as u32 == width * height);
                     gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
-                    gl::TexImage2D(gl::TEXTURE_2D, 0, gl::R8 as GLint, width as i32, height as i32, 0, gl::RED, gl::UNSIGNED_BYTE, flipped.as_ptr() as *const std::ffi::c_void);
+                    gl::TexImage2D(gl::TEXTURE_2D, 0, gl::R16F as GLint, width as i32, height as i32, 0, gl::RED, gl::UNSIGNED_BYTE, flipped.as_ptr() as *const std::ffi::c_void);
                 }
             }
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
@@ -452,5 +489,44 @@ out vec4 f_col;
 
 void main() {
     f_col = v_col * texture(tex, v_uv).r;
+}
+\0";
+const VERT_TRAPEZOIDS: &[u8] = b"
+#version 330
+
+layout(location = 0) in vec2 pos;
+layout(location = 1) in vec2 from;
+layout(location = 2) in vec2 to;
+
+out vec2 v_from;
+out vec2 v_to;
+
+void main() {
+    gl_Position = vec4(pos, 0.0, 1.0);
+    v_from = from;
+    v_to = to;
+}
+\0";
+const FRAG_TRAPEZOIDS: &[u8] = b"
+#version 330
+
+in vec2 v_from;
+in vec2 v_to;
+
+out float f_alpha;
+
+void main() {
+    vec2 origin = gl_FragCoord.xy - vec2(0.5, 0.5);
+    vec2 from = v_from - origin;
+    vec2 d = v_to - v_from;
+    vec2 bottom_left = clamp(-from / d, 0.0, 1.0);
+    vec2 top_right = clamp((1.0 - from) / d, 0.0, 1.0);
+    vec2 enter = min(bottom_left, top_right);
+    vec2 exit = max(bottom_left, top_right);
+    float inside_t1 = max(enter.x, enter.y);
+    float inside_t2 = max(min(exit.x, exit.y), inside_t1);
+    float inside = (from.x + 0.5 * (inside_t1 + inside_t2) * d.x) * (inside_t2 - inside_t1);
+    float right = max(d.x < 0.0 ? min(enter.x, exit.y) - enter.y : exit.y - max(exit.x, enter.y), 0.0);
+    f_alpha = d.y * (inside + right);
 }
 \0";

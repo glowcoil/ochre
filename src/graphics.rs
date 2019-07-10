@@ -9,12 +9,14 @@ pub struct Graphics {
     color: Color,
     vertices: Vec<Vertex>,
     indices: Vec<u16>,
+    atlas_texture: TextureId,
     tex: TextureId,
 }
 
 impl Graphics {
     pub fn new(width: f32, height: f32) -> Graphics {
         let mut renderer = Renderer::new(width as u32, height as u32);
+        let atlas_texture = renderer.create_texture(TextureFormat::A, 400, 300, &vec![0; 400 * 300]);
         let tex = renderer.create_texture(TextureFormat::RGBA, 1024, 1024, &vec![0; 1024 * 1024 * 4]);
         Graphics {
             renderer,
@@ -23,6 +25,7 @@ impl Graphics {
             color: Color::rgba(1.0, 1.0, 1.0, 1.0),
             vertices: Vec::new(),
             indices: Vec::new(),
+            atlas_texture,
             tex,
         }
     }
@@ -85,6 +88,34 @@ impl Graphics {
             TexturedVertex { pos: [1.0, 1.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [1.0, 1.0] },
             TexturedVertex { pos: [0.0, 1.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [0.0, 1.0] },
         ], &[0, 1, 2, 0, 2, 3], self.tex, &RenderOptions::default());
+    }
+
+    pub fn draw_trapezoids_test(&mut self) {
+        self.renderer.clear([0.0, 0.0, 0.0, 0.0], &RenderOptions { target: Some(self.atlas_texture) });
+        self.renderer.draw_trapezoids(&[
+            TrapezoidVertex { pos: [-1.0, -1.0], from: [150.5, 100.5], to: [100.5, 130.5] },
+            TrapezoidVertex { pos: [1.0, -1.0], from: [150.5, 100.5], to: [100.5, 130.5] },
+            TrapezoidVertex { pos: [1.0, 1.0], from: [150.5, 100.5], to: [100.5, 130.5] },
+            TrapezoidVertex { pos: [-1.0, 1.0], from: [150.5, 100.5], to: [100.5, 130.5] },
+            TrapezoidVertex { pos: [-1.0, -1.0], from: [100.5, 130.5], to: [50.5, 100.5] },
+            TrapezoidVertex { pos: [1.0, -1.0], from: [100.5, 130.5], to: [50.5, 100.5] },
+            TrapezoidVertex { pos: [1.0, 1.0], from: [100.5, 130.5], to: [50.5, 100.5] },
+            TrapezoidVertex { pos: [-1.0, 1.0], from: [100.5, 130.5], to: [50.5, 100.5] },
+            TrapezoidVertex { pos: [-1.0, -1.0], from: [50.5, 100.5], to: [100.5, 50.5] },
+            TrapezoidVertex { pos: [1.0, -1.0], from: [50.5, 100.5], to: [100.5, 50.5] },
+            TrapezoidVertex { pos: [1.0, 1.0], from: [50.5, 100.5], to: [100.5, 50.5] },
+            TrapezoidVertex { pos: [-1.0, 1.0], from: [50.5, 100.5], to: [100.5, 50.5] },
+            TrapezoidVertex { pos: [-1.0, -1.0], from: [100.5, 50.5], to: [150.5, 100.5] },
+            TrapezoidVertex { pos: [1.0, -1.0], from: [100.5, 50.5], to: [150.5, 100.5] },
+            TrapezoidVertex { pos: [1.0, 1.0], from: [100.5, 50.5], to: [150.5, 100.5] },
+            TrapezoidVertex { pos: [-1.0, 1.0], from: [100.5, 50.5], to: [150.5, 100.5] },
+        ], &[0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14, 12, 14, 15], &RenderOptions { target: Some(self.atlas_texture) });
+        self.renderer.draw_textured(&[
+            TexturedVertex { pos: [-1.0, -1.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [0.0, 0.0] },
+            TexturedVertex { pos: [0.0, -1.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [1.0, 0.0] },
+            TexturedVertex { pos: [0.0, 0.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [1.0, 1.0] },
+            TexturedVertex { pos: [-1.0, 0.0, 0.0], col: [1.0, 1.0, 1.0, 1.0], uv: [0.0, 1.0] },
+        ], &[0, 1, 2, 0, 2, 3], self.atlas_texture, &RenderOptions::default());
     }
 }
 
