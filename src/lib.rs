@@ -1,3 +1,4 @@
+pub mod geom;
 pub mod graphics;
 pub mod render;
 
