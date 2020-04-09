@@ -1,5 +1,4 @@
-use ochre::graphics::{Color, Graphics, Path};
-use ochre::geom::Vec2;
+use ochre::{Color, Graphics, Path, Vec2};
 
 fn main() {
     let mut events_loop = glutin::EventsLoop::new();

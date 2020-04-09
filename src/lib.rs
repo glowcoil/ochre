@@ -1,6 +1,9 @@
 pub mod geom;
 pub mod graphics;
+pub mod path;
 pub mod render;
 
-extern crate gl;
-extern crate glutin;
+pub use geom::*;
+pub use graphics::*;
+pub use path::*;
+pub use render::*;
