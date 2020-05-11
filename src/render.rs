@@ -7,23 +7,17 @@ macro_rules! offset {
 }
 
 #[derive(Copy, Clone, Debug)]
+#[repr(packed)]
 pub struct Vertex {
-    pub pos: [f32; 3],
-    pub col: [f32; 4],
+    pub pos: [u16; 2],
+    pub col: [u8; 4],
 }
 
 #[derive(Copy, Clone, Debug)]
 pub struct TexturedVertex {
-    pub pos: [f32; 3],
+    pub pos: [f32; 2],
     pub col: [f32; 4],
     pub uv: [f32; 2],
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct TrapezoidVertex {
-    pub pos: [f32; 2],
-    pub from: [f32; 2],
-    pub to: [f32; 2],
 }
 
 pub enum TextureFormat { RGBA, A }
@@ -46,7 +40,6 @@ pub struct Renderer {
     prog: Program,
     prog_tex_rgba: Program,
     prog_tex_a: Program,
-    prog_trapezoids: Program,
 
     textures: HashMap<TextureId, Texture>,
     texture_id: TextureId,
@@ -63,14 +56,12 @@ impl Renderer {
         let prog_tex_a = Program::new(
             &CStr::from_bytes_with_nul(VERT_TEX_A).unwrap(),
             &CStr::from_bytes_with_nul(FRAG_TEX_A).unwrap()).unwrap();
-        let prog_trapezoids = Program::new(
-            &CStr::from_bytes_with_nul(VERT_TRAPEZOIDS).unwrap(),
-            &CStr::from_bytes_with_nul(FRAG_TRAPEZOIDS).unwrap()).unwrap();
 
         unsafe {
             gl::BlendFunc(gl::ONE, gl::ONE_MINUS_SRC_ALPHA);
             gl::Enable(gl::BLEND);
-            gl::Enable(gl::FRAMEBUFFER_SRGB);
+            // gl::Enable(gl::FRAMEBUFFER_SRGB);
+            // gl::Enable(gl::DEPTH_TEST);
         }
 
         Renderer {
@@ -80,7 +71,6 @@ impl Renderer {
             prog,
             prog_tex_rgba,
             prog_tex_a,
-            prog_trapezoids,
 
             textures: HashMap::new(),
             texture_id: 0,
@@ -97,8 +87,31 @@ impl Renderer {
         unsafe {
             gl::ClearColor(col[0], col[1], col[2], col[3]);
             gl::Clear(gl::COLOR_BUFFER_BIT);
+            gl::ClearDepth(1.0);
+            gl::Clear(gl::DEPTH_BUFFER_BIT);
         }
         self.unapply_options(options);
+    }
+
+    pub fn draw_lines(&mut self, vertices: &[Vertex]) {
+        let mut vbo: u32 = 0;
+        let mut vao: u32 = 0;
+        unsafe {
+            gl::GenVertexArrays(1, &mut vao);
+            gl::BindVertexArray(vao);
+
+            gl::GenBuffers(1, &mut vbo);
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+            gl::BufferData(gl::ARRAY_BUFFER, (vertices.len() * std::mem::size_of::<Vertex>()) as isize, vertices.as_ptr() as *const std::ffi::c_void, gl::STREAM_DRAW);
+
+            Vertex::attribs();
+
+            gl::UseProgram(self.prog.id);
+            gl::DrawArrays(gl::LINES, 0, vertices.len() as i32);
+
+            gl::DeleteVertexArrays(1, &vao);
+            gl::DeleteBuffers(1, &vbo);
+        }
     }
 
     pub fn draw(&mut self, vertices: &[Vertex], indices: &[u16], options: &RenderOptions) {
@@ -124,18 +137,6 @@ impl Renderer {
             }
             gl::Uniform1i(0, 0);
             gl::DrawElements(gl::TRIANGLES, vertex_array.count, gl::UNSIGNED_SHORT, 0 as *const GLvoid);
-        }
-        self.unapply_options(options);
-    }
-
-    pub fn draw_trapezoids(&mut self, vertices: &[TrapezoidVertex], indices: &[u16], options: &RenderOptions) {
-        self.apply_options(options);
-        let vertex_array = VertexArray::new(vertices, indices);
-        unsafe {
-            gl::BlendFunc(gl::ONE, gl::ONE);
-            gl::UseProgram(self.prog_trapezoids.id);
-            gl::DrawElements(gl::TRIANGLES, vertex_array.count, gl::UNSIGNED_SHORT, 0 as *const GLvoid);
-            gl::BlendFunc(gl::ONE, gl::ONE_MINUS_SRC_ALPHA);
         }
         self.unapply_options(options);
     }
@@ -246,31 +247,20 @@ trait VertexAttribs {
 impl VertexAttribs for Vertex {
     unsafe fn attribs() {
         gl::EnableVertexAttribArray(0);
-        gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, std::mem::size_of::<Vertex>() as GLint, offset!(Vertex, pos) as *const GLvoid);
+        gl::VertexAttribPointer(0, 2, gl::UNSIGNED_SHORT, gl::FALSE, std::mem::size_of::<Vertex>() as GLint, offset!(Vertex, pos) as *const GLvoid);
         gl::EnableVertexAttribArray(1);
-        gl::VertexAttribPointer(1, 4, gl::FLOAT, gl::FALSE, std::mem::size_of::<Vertex>() as GLint, offset!(Vertex, col) as *const GLvoid);
+        gl::VertexAttribPointer(1, 4, gl::UNSIGNED_BYTE, gl::TRUE, std::mem::size_of::<Vertex>() as GLint, offset!(Vertex, col) as *const GLvoid);
     }
 }
 
 impl VertexAttribs for TexturedVertex {
     unsafe fn attribs() {
         gl::EnableVertexAttribArray(0);
-        gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, std::mem::size_of::<TexturedVertex>() as GLint, offset!(TexturedVertex, pos) as *const GLvoid);
+        gl::VertexAttribPointer(0, 2, gl::FLOAT, gl::FALSE, std::mem::size_of::<TexturedVertex>() as GLint, offset!(TexturedVertex, pos) as *const GLvoid);
         gl::EnableVertexAttribArray(1);
         gl::VertexAttribPointer(1, 4, gl::FLOAT, gl::FALSE, std::mem::size_of::<TexturedVertex>() as GLint, offset!(TexturedVertex, col) as *const GLvoid);
         gl::EnableVertexAttribArray(2);
         gl::VertexAttribPointer(2, 2, gl::FLOAT, gl::FALSE, std::mem::size_of::<TexturedVertex>() as GLint, offset!(TexturedVertex, uv) as *const GLvoid);
-    }
-}
-
-impl VertexAttribs for TrapezoidVertex {
-    unsafe fn attribs() {
-        gl::EnableVertexAttribArray(0);
-        gl::VertexAttribPointer(0, 2, gl::FLOAT, gl::FALSE, std::mem::size_of::<TrapezoidVertex>() as GLint, offset!(TrapezoidVertex, pos) as *const GLvoid);
-        gl::EnableVertexAttribArray(1);
-        gl::VertexAttribPointer(1, 2, gl::FLOAT, gl::FALSE, std::mem::size_of::<TrapezoidVertex>() as GLint, offset!(TrapezoidVertex, from) as *const GLvoid);
-        gl::EnableVertexAttribArray(2);
-        gl::VertexAttribPointer(2, 2, gl::FLOAT, gl::FALSE, std::mem::size_of::<TrapezoidVertex>() as GLint, offset!(TrapezoidVertex, to) as *const GLvoid);
     }
 }
 
@@ -410,13 +400,14 @@ impl Drop for Framebuffer {
 const VERT: &[u8] = b"
 #version 330
 
-layout(location = 0) in vec3 pos;
+layout(location = 0) in vec2 pos;
 layout(location = 1) in vec4 col;
 
 out vec4 v_col;
 
 void main() {
-    gl_Position = vec4(pos, 1.0);
+    vec2 ndc = vec2(2.0 * pos.x / 1920.0 - 1.0, 1.0 - 2.0 * pos.y / 1000.0);
+    gl_Position = vec4(ndc, 0.0, 1.0);
     v_col = col;
 }
 \0";
@@ -434,7 +425,7 @@ void main() {
 const VERT_TEX_RGBA: &[u8] = b"
 #version 330
 
-layout(location = 0) in vec3 pos;
+layout(location = 0) in vec2 pos;
 layout(location = 1) in vec4 col;
 layout(location = 2) in vec2 uv;
 
@@ -442,7 +433,7 @@ out vec2 v_uv;
 out vec4 v_col;
 
 void main() {
-    gl_Position = vec4(pos, 1.0);
+    gl_Position = vec4(pos, 0.0, 1.0);
     v_uv = uv;
     v_col = col;
 }
@@ -464,7 +455,7 @@ void main() {
 const VERT_TEX_A: &[u8] = b"
 #version 330
 
-layout(location = 0) in vec3 pos;
+layout(location = 0) in vec2 pos;
 layout(location = 1) in vec4 col;
 layout(location = 2) in vec2 uv;
 
@@ -472,7 +463,7 @@ out vec4 v_col;
 out vec2 v_uv;
 
 void main() {
-    gl_Position = vec4(pos, 1.0);
+    gl_Position = vec4(pos, 0.0, 1.0);
     v_uv = uv;
     v_col = col;
 }
@@ -489,44 +480,5 @@ out vec4 f_col;
 
 void main() {
     f_col = v_col * texture(tex, v_uv).r;
-}
-\0";
-const VERT_TRAPEZOIDS: &[u8] = b"
-#version 330
-
-layout(location = 0) in vec2 pos;
-layout(location = 1) in vec2 from;
-layout(location = 2) in vec2 to;
-
-out vec2 v_from;
-out vec2 v_to;
-
-void main() {
-    gl_Position = vec4(pos, 0.0, 1.0);
-    v_from = from;
-    v_to = to;
-}
-\0";
-const FRAG_TRAPEZOIDS: &[u8] = b"
-#version 330
-
-in vec2 v_from;
-in vec2 v_to;
-
-out float f_alpha;
-
-void main() {
-    vec2 origin = gl_FragCoord.xy - vec2(0.5, 0.5);
-    vec2 from = v_from - origin;
-    vec2 d = v_to - v_from;
-    vec2 bottom_left = clamp(-from / d, 0.0, 1.0);
-    vec2 top_right = clamp((1.0 - from) / d, 0.0, 1.0);
-    vec2 enter = min(bottom_left, top_right);
-    vec2 exit = max(bottom_left, top_right);
-    float inside_t1 = max(enter.x, enter.y);
-    float inside_t2 = max(min(exit.x, exit.y), inside_t1);
-    float inside = (from.x + 0.5 * (inside_t1 + inside_t2) * d.x) * (inside_t2 - inside_t1);
-    float right = max(d.x < 0.0 ? min(enter.x, exit.y) - enter.y : exit.y - max(exit.x, enter.y), 0.0);
-    f_alpha = d.y * (inside + right);
 }
 \0";
