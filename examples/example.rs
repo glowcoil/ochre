@@ -4,7 +4,7 @@ fn main() {
     let mut events_loop = glutin::EventsLoop::new();
     let window_builder = glutin::WindowBuilder::new()
         .with_dimensions(glutin::dpi::LogicalSize::new(800.0, 600.0))
-        .with_title("gouache");
+        .with_title("ochre");
     let context = glutin::ContextBuilder::new()
         .with_vsync(true)
         .build_windowed(window_builder, &events_loop).unwrap();
@@ -47,25 +47,9 @@ fn main() {
                 glutin::Event::WindowEvent { event, .. } => {
                     use glutin::WindowEvent::*;
                     match event {
-                        Resized(size) => {}
-                        Moved(position) => {}
                         CloseRequested => {
                             running = false;
                         }
-                        Destroyed => {}
-                        DroppedFile(path) => {}
-                        HoveredFile(path) => {}
-                        HoveredFileCancelled => {}
-                        ReceivedCharacter(c) => {}
-                        Focused(focus) => {}
-                        KeyboardInput { input, .. } => {}
-                        CursorMoved { position, modifiers, .. } => {}
-                        CursorEntered { .. } => {}
-                        CursorLeft { .. } => {}
-                        MouseWheel { delta, modifiers, .. } => {}
-                        MouseInput { state, button, modifiers, .. } => {}
-                        Refresh => {}
-                        HiDpiFactorChanged(factor) => {}
                         _ => {}
                     }
                 }
