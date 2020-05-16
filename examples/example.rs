@@ -1,4 +1,4 @@
-use ochre::{Color, Graphics, Path, Vec2};
+use ochre::{Color, Path, Vec2, Renderer};
 
 fn main() {
     let mut events_loop = glutin::EventsLoop::new();
@@ -12,33 +12,11 @@ fn main() {
 
     gl::load_with(|symbol| context.get_proc_address(symbol) as *const _);
 
-    let mut graphics = Graphics::new(800.0, 600.0);
+    let mut renderer = Renderer::new();
 
     let mut running = true;
     while running {
-        graphics.clear(Color::rgba(0.1, 0.15, 0.2, 1.0));
-        graphics.begin_frame();
-        graphics.set_color(Color::rgba(1.0, 1.0, 1.0, 1.0));
-        let rect = Path::rect_fill(Vec2::new(0.0, 0.0), Vec2::new(10.0, 10.0));
-        graphics.draw_mesh(&rect);
-        graphics.set_color(Color::rgba(0.5, 0.25, 1.0, 0.75));
-        let mut path = Path::new();
-        path.move_to(Vec2::new(400.0, 300.0))
-            .quadratic_to(Vec2::new(500.0, 200.0), Vec2::new(400.0, 100.0))
-            .cubic_to(Vec2::new(350.0, 150.0), Vec2::new(100.0, 250.0), Vec2::new(400.0, 300.0));
-        graphics.draw_mesh(&path.fill_convex());
-        graphics.set_color(Color::rgba(0.0, 0.5, 1.0, 0.5));
-        let mut path = Path::new();
-        path.move_to(Vec2::new(600.0, 300.0))
-            .arc_to(50.0, Vec2::new(600.0, 400.0))
-            .arc_to(50.0, Vec2::new(600.0, 300.0));
-        graphics.draw_mesh(&path.fill_convex());
-        graphics.set_color(Color::rgba(0.8, 0.5, 0.0, 1.0));
-        let round_rect = Path::round_rect_fill(Vec2::new(100.0, 10.0), Vec2::new(100.0, 100.0), 20.0);
-        graphics.draw_mesh(&round_rect);
-        graphics.end_frame();
-        graphics.draw_texture_test();
-        graphics.draw_trapezoids_test();
+        renderer.clear([1.0, 1.0, 1.0, 1.0]);
 
         context.swap_buffers().unwrap();
 
