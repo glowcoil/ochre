@@ -13,6 +13,14 @@ pub struct Contour {
     pub closed: bool,
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct Span {
+    pub x: i16,
+    pub y: i16,
+    pub len: u16,
+    pub coverage: f32,
+}
+
 impl Path {
     pub fn new() -> Path {
         Path {
@@ -107,5 +115,101 @@ impl Path {
             contour.closed = true;
         }
         self
+    }
+
+    pub fn to_spans(&self) -> Vec<Span> {
+        #[derive(Copy, Clone, Debug)]
+        pub struct Increment {
+            x: i16,
+            y: i16,
+            area: f32,
+            height: f32,
+        }
+
+        let mut len = 0;
+        for contour in self.contours.iter() {
+            len += contour.points.len();
+        }
+        let mut increments = Vec::with_capacity(len);
+
+        let (mut y_min, mut y_max) = (0, 0);
+        if let Some(contour) = self.contours.first() {
+            if let Some(first) = contour.points.first() {
+                y_min = first.y as i16;
+                y_max = first.y as i16;
+            }
+        }
+        for contour in self.contours.iter() {
+            let mut last = *contour.points.last().unwrap();
+            for &point in contour.points.iter() {
+                if point.y != last.y {
+                    let sign = (point.y - last.y).signum();
+                    let (p0, p1) = if point.y < last.y { (point, last) } else { (last, point) };
+                    let dxdy = (p1.x - p0.x) / (p1.y - p0.y);
+                    let dydx = 1.0 / dxdy;
+                    y_min = y_min.min(p0.y as i16);
+                    y_max = y_max.max(p1.y as i16 + 1);
+                    for y in p0.y as i16..p1.y as i16 + 1 {
+                        let row_y0 = p0.y.max(y as f32);
+                        let row_y1 = p1.y.min((y + 1) as f32);
+                        let row_x0 = p0.x + dxdy * (row_y0 - p0.y);
+                        let row_x1 = p0.x + dxdy * (row_y1 - p0.y);
+                        let row_x_min = row_x0.min(row_x1);
+                        let row_x_max = row_x0.max(row_x1);
+                        for x in row_x_min as i16..row_x_max as i16 + 1 {
+                            let x0 = row_x_min.max(x as f32);
+                            let x1 = row_x_max.min((x + 1) as f32);
+                            let (y0, y1) = if p0.x == p1.x {
+                                (row_y0, row_y1)
+                            } else {
+                                (p0.y + dydx * (x0 - p0.x), p0.y + dydx * (x1 - p0.x))
+                            };
+                            let height = sign * (y1 - y0).abs();
+                            let area = 0.5 * height * (2.0 * (x + 1) as f32 - x0 - x1);
+                            increments.push(Increment { x, y, area, height });
+                        }
+                    }
+                }
+                last = point;
+            }
+        }
+
+        increments.sort_unstable_by_key(|inc| (inc.y, inc.x));
+
+        let mut spans = Vec::new();
+        if !increments.is_empty() {
+            let mut x = increments[0].x;
+            let mut y = increments[0].y;
+            let mut coverage: f32 = 0.0;
+            let mut accum: f32 = 0.0;
+            for increment in increments {
+                if increment.x != x || increment.y != y {
+                    if coverage != 0.0 {
+                        spans.push(Span { x, y, len: 1, coverage: coverage.abs().min(1.0) });
+                    }
+                    if increment.y == y && increment.x > x + 1 && accum != 0.0 {
+                        spans.push(Span {
+                            x: x + 1,
+                            y: y,
+                            len: (increment.x - x - 1) as u16,
+                            coverage: accum.abs().min(1.0),
+                        });
+                    }
+                    if increment.y != y {
+                        accum = 0.0;
+                    }
+                    x = increment.x;
+                    y = increment.y;
+                    coverage = accum;
+                }
+                coverage += increment.area;
+                accum += increment.height;
+            }
+            if coverage != 0.0 {
+                spans.push(Span { x, y, len: 1, coverage: coverage.abs().min(1.0) });
+            }
+        }
+
+        spans
     }
 }

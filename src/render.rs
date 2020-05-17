@@ -8,8 +8,8 @@ macro_rules! offset {
 
 #[derive(Copy, Clone, Debug)]
 pub struct Vertex {
-    pub pos: [f32; 2],
-    pub col: [f32; 4],
+    pub pos: [i16; 2],
+    pub col: [u8; 4],
 }
 
 pub struct Renderer {
@@ -25,7 +25,6 @@ impl Renderer {
         unsafe {
             gl::BlendFunc(gl::ONE, gl::ONE_MINUS_SRC_ALPHA);
             gl::Enable(gl::BLEND);
-            gl::Enable(gl::FRAMEBUFFER_SRGB);
         }
 
         Renderer {
@@ -40,11 +39,33 @@ impl Renderer {
         }
     }
 
-    pub fn draw(&mut self, vertices: &[Vertex], indices: &[u16]) {
-        let vertex_array = VertexArray::new(vertices, indices);
+    pub fn draw_lines(&mut self, vertices: &[Vertex], width: u32, height: u32) {
+        let mut vbo: u32 = 0;
+        let mut vao: u32 = 0;
         unsafe {
+            gl::GenVertexArrays(1, &mut vao);
+            gl::BindVertexArray(vao);
+
+            gl::GenBuffers(1, &mut vbo);
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+            gl::BufferData(gl::ARRAY_BUFFER, (vertices.len() * std::mem::size_of::<Vertex>()) as isize, vertices.as_ptr() as *const std::ffi::c_void, gl::STREAM_DRAW);
+
+            let res = gl::GetUniformLocation(self.prog.id, b"res\0" as *const u8 as *const i8);
+            gl::Uniform2ui(res, width, height);
+
+            let pos = gl::GetAttribLocation(self.prog.id, b"pos\0" as *const u8 as *const i8) as GLuint;
+            gl::EnableVertexAttribArray(pos);
+            gl::VertexAttribPointer(pos, 2, gl::SHORT, gl::FALSE, std::mem::size_of::<Vertex>() as GLint, offset!(Vertex, pos) as *const GLvoid);
+
+            let col = gl::GetAttribLocation(self.prog.id, b"col\0" as *const u8 as *const i8) as GLuint;
+            gl::EnableVertexAttribArray(col);
+            gl::VertexAttribPointer(col, 4, gl::UNSIGNED_BYTE, gl::TRUE, std::mem::size_of::<Vertex>() as GLint, offset!(Vertex, col) as *const GLvoid);
+
             gl::UseProgram(self.prog.id);
-            gl::DrawElements(gl::TRIANGLES, vertex_array.count, gl::UNSIGNED_SHORT, 0 as *const GLvoid);
+            gl::DrawArrays(gl::LINES, 0, vertices.len() as i32);
+
+            gl::DeleteVertexArrays(1, &vao);
+            gl::DeleteBuffers(1, &vbo);
         }
     }
 }
@@ -110,70 +131,19 @@ fn shader(shader_src: &CStr, shader_type: GLenum) -> Result<GLuint, String> {
     }
 }
 
-trait VertexAttribs {
-    unsafe fn attribs();
-}
-
-impl VertexAttribs for Vertex {
-    unsafe fn attribs() {
-        gl::EnableVertexAttribArray(0);
-        gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, std::mem::size_of::<Vertex>() as GLint, offset!(Vertex, pos) as *const GLvoid);
-        gl::EnableVertexAttribArray(1);
-        gl::VertexAttribPointer(1, 4, gl::FLOAT, gl::FALSE, std::mem::size_of::<Vertex>() as GLint, offset!(Vertex, col) as *const GLvoid);
-    }
-}
-
-struct VertexArray<V> {
-    vao: GLuint,
-    vbo: GLuint,
-    ibo: GLuint,
-    count: i32,
-    phantom: std::marker::PhantomData<V>,
-}
-
-impl<V: VertexAttribs> VertexArray<V> {
-    fn new(vertices: &[V], indices: &[u16]) -> VertexArray<V> {
-        let mut vbo: u32 = 0;
-        let mut ibo: u32 = 0;
-        let mut vao: u32 = 0;
-        unsafe {
-            gl::GenVertexArrays(1, &mut vao);
-            gl::BindVertexArray(vao);
-
-            gl::GenBuffers(1, &mut vbo);
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-            gl::BufferData(gl::ARRAY_BUFFER, (vertices.len() * std::mem::size_of::<V>()) as isize, vertices.as_ptr() as *const std::ffi::c_void, gl::DYNAMIC_DRAW);
-
-            gl::GenBuffers(1, &mut ibo);
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ibo);
-            gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, (indices.len() * std::mem::size_of::<u16>()) as isize, indices.as_ptr() as *const std::ffi::c_void, gl::DYNAMIC_DRAW);
-
-            V::attribs();
-        }
-        VertexArray { vao, vbo, ibo, count: indices.len() as i32, phantom: std::marker::PhantomData }
-    }
-}
-
-impl<V> Drop for VertexArray<V> {
-    fn drop(&mut self) {
-        unsafe {
-            gl::DeleteVertexArrays(1, &self.vao);
-            gl::DeleteBuffers(1, &self.ibo);
-            gl::DeleteBuffers(1, &self.vbo);
-        }
-    }
-}
-
 const VERT: &[u8] = b"
 #version 330
 
-layout(location = 0) in vec3 pos;
+uniform uvec2 res;
+
+layout(location = 0) in vec2 pos;
 layout(location = 1) in vec4 col;
 
 out vec4 v_col;
 
 void main() {
-    gl_Position = vec4(pos, 1.0);
+    vec2 scaled = 2.0 * pos / vec2(res);
+    gl_Position = vec4(scaled.x - 1.0, 1.0 - scaled.y, 0.0, 1.0);
     v_col = col;
 }
 \0";
