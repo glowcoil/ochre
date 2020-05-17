@@ -174,15 +174,34 @@ impl Path {
             }
         }
 
-        increments.sort_unstable_by_key(|inc| (inc.y, inc.x));
+        let mut counts = vec![0; (y_max + 1 - y_min) as usize];
+        for increment in increments.iter() {
+            counts[(increment.y - y_min) as usize] += 1;
+        }
+        let mut starts = Vec::with_capacity((y_max + 1 - y_min) as usize);
+        let mut total = 0;
+        for count in counts.iter() {
+            let new_total = total + *count;
+            starts.push(total);
+            total = new_total;
+        }
+        let mut sorted_increments = vec![Increment { x: 0, y: 0, area: 0.0, height: 0.0 }; increments.len()];
+        for increment in increments {
+            let pos = &mut starts[(increment.y - y_min) as usize];
+            sorted_increments[*pos] = increment;
+            *pos += 1;
+        }
+        for (end, count) in starts.iter().zip(counts.iter()) {
+            sorted_increments[end - count..*end].sort_unstable_by_key(|inc| inc.x);
+        }
 
         let mut spans = Vec::new();
-        if !increments.is_empty() {
-            let mut x = increments[0].x;
-            let mut y = increments[0].y;
+        if !sorted_increments.is_empty() {
+            let mut x = sorted_increments[0].x;
+            let mut y = sorted_increments[0].y;
             let mut coverage: f32 = 0.0;
             let mut accum: f32 = 0.0;
-            for increment in increments {
+            for increment in sorted_increments {
                 if increment.x != x || increment.y != y {
                     if coverage != 0.0 {
                         spans.push(Span { x, y, len: 1, coverage: coverage.abs().min(1.0) });
