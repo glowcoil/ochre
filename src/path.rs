@@ -90,6 +90,7 @@ impl Path {
     pub fn arc_to(&mut self, radius: f32, large_arc: bool, sweep: bool, point: Vec2) -> &mut Self {
         if let Some(contour) = self.contours.last_mut() {
             let last = *contour.points.last().unwrap();
+            let radius = radius.max(0.5 * last.distance(point));
             let to_midpoint = 0.5 * (point - last);
             let dist_to_midpoint = to_midpoint.length();
             let dist_to_center = (radius * radius - dist_to_midpoint * dist_to_midpoint).sqrt();
@@ -98,9 +99,9 @@ impl Path {
             let start_angle = (last.y - center.y).atan2(last.x - center.x);
             let mut end_angle = (point.y - center.y).atan2(point.x - center.x);
             if sweep && end_angle < start_angle { end_angle += 2.0 * std::f32::consts::PI; }
-            let n = (std::f32::consts::PI / (1.0 - TOLERANCE / radius).acos()) as usize;
-            let dtheta = 2.0 * std::f32::consts::PI / n as f32;
-            let mut theta = 0.0;
+            let n = (0.5 * (end_angle - start_angle).abs() / (1.0 - TOLERANCE / radius).acos()) as usize;
+            let dtheta = (end_angle - start_angle) / n as f32;
+            let mut theta = start_angle;
             for _ in 0..n.saturating_sub(1) {
                 theta += dtheta;
                 contour.points.push(center + radius * Vec2::new(theta.cos(), theta.sin()));
