@@ -134,45 +134,86 @@ impl Path {
         let mut increments = Vec::with_capacity(len);
 
         let (mut y_min, mut y_max) = (0, 0);
+        let mut increment = Increment { x: 0, y: 0, area: 0.0, height: 0.0 };
         if let Some(contour) = self.contours.first() {
             if let Some(first) = contour.points.first() {
                 y_min = first.y as i16;
                 y_max = first.y as i16;
+            }
+            if let Some(last) = contour.points.last() {
+                increment.x = last.x as i16;
+                increment.y = last.y as i16;
             }
         }
         for contour in self.contours.iter() {
             let mut last = *contour.points.last().unwrap();
             for &point in contour.points.iter() {
                 if point.y != last.y {
-                    let sign = (point.y - last.y).signum();
-                    let (p0, p1) = if point.y < last.y { (point, last) } else { (last, point) };
-                    let dxdy = (p1.x - p0.x) / (p1.y - p0.y);
-                    let dydx = 1.0 / dxdy;
-                    y_min = y_min.min(p0.y as i16);
-                    y_max = y_max.max(p1.y as i16 + 1);
-                    for y in p0.y as i16..p1.y as i16 + 1 {
-                        let row_y0 = p0.y.max(y as f32);
-                        let row_y1 = p1.y.min((y + 1) as f32);
-                        let row_x0 = p0.x + dxdy * (row_y0 - p0.y);
-                        let row_x1 = p0.x + dxdy * (row_y1 - p0.y);
-                        let row_x_min = row_x0.min(row_x1);
-                        let row_x_max = row_x0.max(row_x1);
-                        for x in row_x_min as i16..row_x_max as i16 + 1 {
-                            let x0 = row_x_min.max(x as f32);
-                            let x1 = row_x_max.min((x + 1) as f32);
-                            let (y0, y1) = if p0.x == p1.x {
-                                (row_y0, row_y1)
+                    y_min = y_min.min(last.y as i16).min(point.y as i16);
+                    y_max = y_max.max(last.y as i16).max(point.y as i16);
+                    let x_dir = (point.x - last.x).signum() as i16;
+                    let y_dir = (point.y - last.y).signum() as i16;
+                    let dtdx = 1.0 / (point.x - last.x);
+                    let dtdy = 1.0 / (point.y - last.y);
+                    let end_x = point.x as i16;
+                    let end_y = point.y as i16;
+                    let mut x = last.x as i16;
+                    let mut y = last.y as i16;
+                    let mut row_t0: f32 = 0.0;
+                    let mut col_t0 = 0.0;
+                    let next_y = if point.y > last.y { (y + 1) as f32 } else { y as f32 };
+                    let mut row_t1 = (dtdy * (next_y - last.y)).min(1.0);
+                    let mut col_t1 = if last.x == point.x {
+                        std::f32::INFINITY
+                    } else {
+                        let next_x = if point.x > last.x { (x + 1) as f32 } else { x as f32 };
+                        (dtdx * (next_x - last.x)).min(1.0)
+                    };
+                    let x_step = dtdx.abs();
+                    let y_step = dtdy.abs();
+
+                    loop {
+                        let t0 = row_t0.max(col_t0);
+                        let t1 = row_t1.min(col_t1);
+                        let p0 = (1.0 - t0) * last + t0 * point;
+                        let p1 = (1.0 - t1) * last + t1 * point;
+                        let height = p1.y - p0.y;
+                        let right = (x + 1) as f32;
+                        let area = 0.5 * height * ((right - p0.x) + (right - p1.x));
+                        if x == increment.x && y == increment.y {
+                            increment.area += area;
+                            increment.height += height;
+                        } else {
+                            if increment.area != 0.0 || increment.height != 0.0 {
+                                increments.push(increment);
+                            }
+                            increment = Increment { x, y, area, height };
+                        }
+
+                        if row_t1 < col_t1 {
+                            row_t0 = row_t1;
+                            row_t1 = (row_t1 + y_step).min(1.0);
+                            if row_t0 == 1.0 {
+                                break;
                             } else {
-                                (p0.y + dydx * (x0 - p0.x), p0.y + dydx * (x1 - p0.x))
-                            };
-                            let height = sign * (y1 - y0).abs();
-                            let area = 0.5 * height * (2.0 * (x + 1) as f32 - x0 - x1);
-                            increments.push(Increment { x, y, area, height });
+                                y += y_dir;
+                            }
+                        } else {
+                            col_t0 = col_t1;
+                            col_t1 = (col_t1 + x_step).min(1.0);
+                            if col_t0 == 1.0 {
+                                break;
+                            } else {
+                                x += x_dir;
+                            }
                         }
                     }
                 }
                 last = point;
             }
+        }
+        if increment.area != 0.0 || increment.height != 0.0 {
+            increments.push(increment);
         }
 
         let mut counts = vec![0; (y_max + 1 - y_min) as usize];
