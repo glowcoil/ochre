@@ -149,8 +149,6 @@ impl Path {
             let mut last = *contour.points.last().unwrap();
             for &point in contour.points.iter() {
                 if point.y != last.y {
-                    y_min = y_min.min(last.y as i16).min(point.y as i16);
-                    y_max = y_max.max(last.y as i16).max(point.y as i16);
                     let x_dir = (point.x - last.x).signum() as i16;
                     let y_dir = (point.y - last.y).signum() as i16;
                     let dtdx = 1.0 / (point.x - last.x);
@@ -186,6 +184,8 @@ impl Path {
                         } else {
                             if increment.area != 0.0 || increment.height != 0.0 {
                                 increments.push(increment);
+                                y_min = y_min.min(increment.y);
+                                y_max = y_max.max(increment.y);
                             }
                             increment = Increment { x, y, area, height };
                         }
@@ -214,6 +214,8 @@ impl Path {
         }
         if increment.area != 0.0 || increment.height != 0.0 {
             increments.push(increment);
+            y_min = y_min.min(increment.y);
+            y_max = y_max.max(increment.y);
         }
 
         let mut counts = vec![0; (y_max + 1 - y_min) as usize];
