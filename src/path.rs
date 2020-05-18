@@ -245,10 +245,10 @@ impl Path {
             let mut accum: f32 = 0.0;
             for increment in sorted_increments {
                 if increment.x != x || increment.y != y {
-                    if coverage != 0.0 {
+                    if (coverage.abs() * 255.0) as u8 != 0 {
                         spans.push(Span { x, y, len: 1, coverage: coverage.abs().min(1.0) });
                     }
-                    if increment.y == y && increment.x > x + 1 && accum != 0.0 {
+                    if increment.y == y && increment.x > x + 1 && (accum.abs() * 255.0) as u8 != 0 {
                         spans.push(Span {
                             x: x + 1,
                             y: y,
@@ -266,7 +266,7 @@ impl Path {
                 coverage += increment.area;
                 accum += increment.height;
             }
-            if coverage != 0.0 {
+            if (coverage.abs() * 255.0) as u8 != 0 {
                 spans.push(Span { x, y, len: 1, coverage: coverage.abs().min(1.0) });
             }
         }
