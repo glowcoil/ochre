@@ -23,7 +23,7 @@ impl Renderer {
             &CStr::from_bytes_with_nul(FRAG).unwrap()).unwrap();
 
         unsafe {
-            gl::BlendFunc(gl::ONE, gl::ONE_MINUS_SRC_ALPHA);
+            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
             gl::Enable(gl::BLEND);
         }
 

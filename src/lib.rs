@@ -12,11 +12,7 @@ pub struct Color {
 }
 
 impl Color {
-    pub fn new(r: f32, g: f32, b: f32, a: f32) -> Color {
+    pub fn rgba(r: f32, g: f32, b: f32, a: f32) -> Color {
         Color { r, g, b, a }
-    }
-
-    pub fn premultiply(r: f32, g: f32, b: f32, a: f32) -> Color {
-        Color { r: a * r, g: a * g, b: a * b, a }
     }
 }

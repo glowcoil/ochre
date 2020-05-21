@@ -20,7 +20,7 @@ fn main() {
 
     let mut vertices = Vec::new();
     for span in spans {
-        let col = [(255.0 * span.coverage) as u8, (255.0 * span.coverage) as u8, (255.0 * span.coverage) as u8, (255.0 * span.coverage) as u8];
+        let col = [255, 255, 255, (255.0 * span.coverage) as u8];
         vertices.push(Vertex { pos: [span.x, span.y], col });
         vertices.push(Vertex { pos: [span.x + span.len as i16, span.y], col });
     }
