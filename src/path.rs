@@ -1,6 +1,7 @@
 use crate::geom::*;
 
 const TOLERANCE: f32 = 0.1;
+pub const TILE_SIZE: usize = 8;
 
 #[derive(Clone, Debug)]
 pub struct Path {
@@ -13,12 +14,17 @@ pub struct Contour {
     pub closed: bool,
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Span {
-    pub x: i16,
-    pub y: i16,
-    pub len: u16,
-    pub coverage: f32,
+#[derive(Clone, Debug)]
+pub struct Tiles {
+    pub map: Vec<Tile>,
+    pub data: Vec<u8>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Tile {
+    x: i16,
+    y: i16,
+    index: Option<usize>,
 }
 
 impl Path {
@@ -118,7 +124,44 @@ impl Path {
         self
     }
 
-    pub fn to_spans(&self) -> Vec<Span> {
+    pub fn stroke(&self, width: f32) -> Path {
+        let mut path = Path::new();
+
+        for contour in self.contours.iter() {
+            let mut points = Vec::new();
+            points.extend_from_slice(&contour.points);
+            points.extend(contour.points.iter().rev());
+            for i in 0..contour.points.len() {
+                let prev = points[(i + points.len() - 1) % contour.points.len()];
+                let curr = points[i];
+                let next = points[(i + 1) % contour.points.len()];
+                let prev_tan = (curr - prev).normalized();
+                let next_tan = (next - curr).normalized();
+                let prev_nor = Vec2::new(-prev_tan.y, prev_tan.x);
+                let next_nor = Vec2::new(-next_tan.y, next_tan.x);
+                if curr != prev && curr != next {
+                    points[i] += 0.5 * width * (prev_nor + next_nor) * (1.0 / (1.0 + prev_nor.dot(next_nor))).min(2.0);
+                }
+            }
+            for i in 0..contour.points.len() {
+                let prev = points[contour.points.len() + (i + contour.points.len() - 1) % contour.points.len()];
+                let curr = points[contour.points.len() + i];
+                let next = points[contour.points.len() + (i + 1) % contour.points.len()];
+                let prev_tan = (curr - prev).normalized();
+                let next_tan = (next - curr).normalized();
+                let prev_nor = Vec2::new(-prev_tan.y, prev_tan.x);
+                let next_nor = Vec2::new(-next_tan.y, next_tan.x);
+                if curr != prev && curr != next {
+                    points[contour.points.len() + i] += 0.5 * width * (prev_nor + next_nor) * (1.0 / (1.0 + prev_nor.dot(next_nor))).min(2.0);
+                }
+            }
+            path.contours.push(Contour { points, closed: true });
+        }
+
+        path
+    }
+
+    pub fn to_spans(&self) -> Vec<(i16, i16, [u8; TILE_SIZE * TILE_SIZE], u8)> {
         #[derive(Copy, Clone, Debug)]
         pub struct Increment {
             x: i16,
@@ -127,24 +170,7 @@ impl Path {
             height: f32,
         }
 
-        let mut len = 0;
-        for contour in self.contours.iter() {
-            len += contour.points.len();
-        }
-        let mut increments = Vec::with_capacity(len);
-
-        let (mut y_min, mut y_max) = (0, 0);
-        let mut increment = Increment { x: 0, y: 0, area: 0.0, height: 0.0 };
-        if let Some(contour) = self.contours.first() {
-            if let Some(first) = contour.points.first() {
-                y_min = first.y as i16;
-                y_max = first.y as i16;
-            }
-            if let Some(last) = contour.points.last() {
-                increment.x = last.x as i16;
-                increment.y = last.y as i16;
-            }
-        }
+        let mut increments = Vec::new();
         for contour in self.contours.iter() {
             let mut last = *contour.points.last().unwrap();
             for &point in contour.points.iter() {
@@ -159,8 +185,12 @@ impl Path {
                     let mut y = last.y as i16;
                     let mut row_t0: f32 = 0.0;
                     let mut col_t0 = 0.0;
-                    let next_y = if point.y > last.y { (y + 1) as f32 } else { y as f32 };
-                    let mut row_t1 = (dtdy * (next_y - last.y)).min(1.0);
+                    let mut row_t1 = if last.y == point.y {
+                        std::f32::INFINITY
+                    } else {
+                        let next_y = if point.y > last.y { (y + 1) as f32 } else { y as f32 };
+                        (dtdy * (next_y - last.y)).min(1.0)
+                    };
                     let mut col_t1 = if last.x == point.x {
                         std::f32::INFINITY
                     } else {
@@ -178,17 +208,8 @@ impl Path {
                         let height = p1.y - p0.y;
                         let right = (x + 1) as f32;
                         let area = 0.5 * height * ((right - p0.x) + (right - p1.x));
-                        if x == increment.x && y == increment.y {
-                            increment.area += area;
-                            increment.height += height;
-                        } else {
-                            if increment.area != 0.0 || increment.height != 0.0 {
-                                increments.push(increment);
-                                y_min = y_min.min(increment.y);
-                                y_max = y_max.max(increment.y);
-                            }
-                            increment = Increment { x, y, area, height };
-                        }
+
+                        increments.push(Increment { x, y, area, height });
 
                         if row_t1 < col_t1 {
                             row_t0 = row_t1;
@@ -212,12 +233,73 @@ impl Path {
                 last = point;
             }
         }
-        if increment.area != 0.0 || increment.height != 0.0 {
-            increments.push(increment);
-            y_min = y_min.min(increment.y);
-            y_max = y_max.max(increment.y);
+
+        #[derive(Copy, Clone)]
+        struct Block {
+            tile_x: i16,
+            tile_y: i16,
+            start: usize,
+            end: usize,
+        }
+        let mut blocks = Vec::new();
+        let mut block = Block { tile_x: 0, tile_y: 0, start: 0, end: 0 };
+        if let Some(first) = increments.first() {
+            block.tile_x = ((first.x as u16) / TILE_SIZE as u16) as i16;
+            block.tile_y = ((first.y as u16) / TILE_SIZE as u16) as i16;
+        }
+        for (i, increment) in increments.iter().enumerate() {
+            let tile_x = ((increment.x as u16) / TILE_SIZE as u16) as i16;
+            let tile_y = ((increment.y as u16) / TILE_SIZE as u16) as i16;
+            if tile_x != block.tile_x || tile_y != block.tile_y {
+                blocks.push(block);
+                block = Block { tile_x, tile_y, start: i, end: i };
+            }
+            block.end += 1;
+        }
+        blocks.push(block);
+        blocks.sort_unstable_by_key(|block| (block.tile_y, block.tile_x));
+
+        let mut tiles = Vec::new();
+
+        let mut areas = [0.0; TILE_SIZE * TILE_SIZE];
+        let mut heights = [0.0; TILE_SIZE * TILE_SIZE];
+        let mut prev = [0.0; TILE_SIZE];
+        let mut next = [0.0; TILE_SIZE];
+        for i in 0..blocks.len() {
+            let block = blocks[i];
+            for increment in &increments[block.start..block.end] {
+                let x = increment.x as usize % TILE_SIZE;
+                let y = increment.y as usize % TILE_SIZE;
+                areas[(y * TILE_SIZE + x) as usize] += increment.area;
+                heights[(y * TILE_SIZE + x) as usize] += increment.height;
+            }
+            if i + 1 == blocks.len() || blocks[i + 1].tile_x != block.tile_x || blocks[i + 1].tile_y != block.tile_y {
+                let mut tile = [0; TILE_SIZE * TILE_SIZE];
+                for y in 0..TILE_SIZE {
+                    let mut accum = prev[y];
+                    for x in 0..TILE_SIZE {
+                        tile[y * TILE_SIZE + x] = (((accum + areas[y * TILE_SIZE + x]).abs().min(1.0) * 255.0) as u8);
+                        accum += heights[y * TILE_SIZE + x];
+                    }
+                    next[y] = accum;
+                }
+                let mut winding = 0;
+                for next in next.iter() { if (next.abs() * 255.0) as u8 != 0 { winding = 1; } }
+                tiles.push((block.tile_x, block.tile_y, tile, winding));
+                areas = [0.0; TILE_SIZE * TILE_SIZE];
+                heights = [0.0; TILE_SIZE * TILE_SIZE];
+                if i + 1 < blocks.len() && blocks[i + 1].tile_y == block.tile_y {
+                    prev = next;
+                } else {
+                    prev = [0.0; TILE_SIZE];
+                }
+                next = [0.0; TILE_SIZE];
+            }
         }
 
+        tiles
+
+        /*
         let mut counts = vec![0; (y_max + 1 - y_min) as usize];
         for increment in increments.iter() {
             counts[(increment.y - y_min) as usize] += 1;
@@ -240,12 +322,12 @@ impl Path {
         }
 
         let mut spans = Vec::new();
-        if !sorted_increments.is_empty() {
-            let mut x = sorted_increments[0].x;
-            let mut y = sorted_increments[0].y;
+        if !increments.is_empty() {
+            let mut x = increments[0].x;
+            let mut y = increments[0].y;
             let mut coverage: f32 = 0.0;
             let mut accum: f32 = 0.0;
-            for increment in sorted_increments {
+            for increment in increments {
                 if increment.x != x || increment.y != y {
                     if (coverage.abs() * 255.0) as u8 != 0 {
                         spans.push(Span { x, y, len: 1, coverage: coverage.abs().min(1.0) });
@@ -273,6 +355,6 @@ impl Path {
             }
         }
 
-        spans
+        spans*/
     }
 }
