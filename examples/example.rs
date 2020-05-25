@@ -1,4 +1,4 @@
-use ochre::{Color, Path, Vec2, Vertex, Renderer};
+use ochre::{Color, Path, Vec2, Vertex, Quad, Renderer};
 
 fn main() {
     let mut events_loop = glutin::EventsLoop::new();
@@ -18,11 +18,10 @@ fn main() {
         .cubic_to(Vec2::new(350.0, 150.0), Vec2::new(100.0, 250.0), Vec2::new(400.0, 300.0));
     let spans = path.to_spans();
 
-    let mut vertices = Vec::new();
+    let mut quads = Vec::new();
     for span in spans {
         let col = [255, 255, 255, (255.0 * span.coverage) as u8];
-        vertices.push(Vertex { pos: [span.x, span.y], col });
-        vertices.push(Vertex { pos: [span.x + span.len as i16, span.y], col });
+        quads.push(Quad { pos: [span.x, span.y], size: [span.len, 1], col });
     }
 
     let mut renderer = Renderer::new();
@@ -31,7 +30,7 @@ fn main() {
     while running {
         renderer.clear([0.0, 0.0, 0.0, 1.0]);
 
-        renderer.draw_lines(&vertices[..], 800, 600);
+        renderer.draw_quads(&quads[..], 800, 600);
         context.swap_buffers().unwrap();
 
         events_loop.poll_events(|event| {

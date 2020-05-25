@@ -12,6 +12,13 @@ pub struct Vertex {
     pub col: [u8; 4],
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct Quad {
+    pub pos: [i16; 2],
+    pub size: [u16; 2],
+    pub col: [u8; 4],
+}
+
 pub struct Renderer {
     prog: Program,
 }
@@ -39,33 +46,59 @@ impl Renderer {
         }
     }
 
-    pub fn draw_lines(&mut self, vertices: &[Vertex], width: u32, height: u32) {
-        let mut vbo: u32 = 0;
+    pub fn draw_quads(&mut self, quads: &[Quad], width: u32, height: u32) {
+        let mut quad_vbo: u32 = 0;
+        let mut quads_vbo: u32 = 0;
         let mut vao: u32 = 0;
         unsafe {
+            let quad: [[f32; 2]; 4] = [
+                [0.0, 0.0],
+                [1.0, 0.0],
+                [0.0, 1.0],
+                [1.0, 1.0],
+            ];
+
             gl::GenVertexArrays(1, &mut vao);
             gl::BindVertexArray(vao);
 
-            gl::GenBuffers(1, &mut vbo);
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-            gl::BufferData(gl::ARRAY_BUFFER, (vertices.len() * std::mem::size_of::<Vertex>()) as isize, vertices.as_ptr() as *const std::ffi::c_void, gl::STREAM_DRAW);
+            gl::GenBuffers(1, &mut quad_vbo);
+            gl::BindBuffer(gl::ARRAY_BUFFER, quad_vbo);
+            gl::BufferData(gl::ARRAY_BUFFER, (quad.len() * std::mem::size_of::<[f32; 2]>()) as isize, quad.as_ptr() as *const std::ffi::c_void, gl::STREAM_DRAW);
+
+            let uv = gl::GetAttribLocation(self.prog.id, b"uv\0" as *const u8 as *const i8) as GLuint;
+            gl::EnableVertexAttribArray(uv);
+            gl::VertexAttribPointer(uv, 2, gl::FLOAT, gl::FALSE, 0, 0 as *const GLvoid);
+            gl::VertexAttribDivisor(uv, 0);
+
+            gl::GenBuffers(1, &mut quads_vbo);
+            gl::BindBuffer(gl::ARRAY_BUFFER, quads_vbo);
+            gl::BufferData(gl::ARRAY_BUFFER, (quads.len() * std::mem::size_of::<Quad>()) as isize, quads.as_ptr() as *const std::ffi::c_void, gl::STREAM_DRAW);
+
+            let pos = gl::GetAttribLocation(self.prog.id, b"pos\0" as *const u8 as *const i8) as GLuint;
+            gl::EnableVertexAttribArray(pos);
+            gl::VertexAttribPointer(pos, 2, gl::SHORT, gl::FALSE, std::mem::size_of::<Quad>() as GLint, offset!(Quad, pos) as *const GLvoid);
+            gl::VertexAttribDivisor(pos, 1);
+
+            let size = gl::GetAttribLocation(self.prog.id, b"size\0" as *const u8 as *const i8) as GLuint;
+            gl::EnableVertexAttribArray(size);
+            gl::VertexAttribPointer(size, 2, gl::UNSIGNED_SHORT, gl::FALSE, std::mem::size_of::<Quad>() as GLint, offset!(Quad, size) as *const GLvoid);
+            gl::VertexAttribDivisor(size, 1);
+
+            let col = gl::GetAttribLocation(self.prog.id, b"col\0" as *const u8 as *const i8) as GLuint;
+            gl::EnableVertexAttribArray(col);
+            gl::VertexAttribPointer(col, 4, gl::UNSIGNED_BYTE, gl::TRUE, std::mem::size_of::<Quad>() as GLint, offset!(Quad, col) as *const GLvoid);
+            gl::VertexAttribDivisor(col, 1);
+
+            gl::UseProgram(self.prog.id);
 
             let res = gl::GetUniformLocation(self.prog.id, b"res\0" as *const u8 as *const i8);
             gl::Uniform2ui(res, width, height);
 
-            let pos = gl::GetAttribLocation(self.prog.id, b"pos\0" as *const u8 as *const i8) as GLuint;
-            gl::EnableVertexAttribArray(pos);
-            gl::VertexAttribPointer(pos, 2, gl::SHORT, gl::FALSE, std::mem::size_of::<Vertex>() as GLint, offset!(Vertex, pos) as *const GLvoid);
-
-            let col = gl::GetAttribLocation(self.prog.id, b"col\0" as *const u8 as *const i8) as GLuint;
-            gl::EnableVertexAttribArray(col);
-            gl::VertexAttribPointer(col, 4, gl::UNSIGNED_BYTE, gl::TRUE, std::mem::size_of::<Vertex>() as GLint, offset!(Vertex, col) as *const GLvoid);
-
-            gl::UseProgram(self.prog.id);
-            gl::DrawArrays(gl::LINES, 0, vertices.len() as i32);
+            gl::DrawArraysInstanced(gl::TRIANGLE_STRIP, 0, quad.len() as i32, quads.len() as i32);
 
             gl::DeleteVertexArrays(1, &vao);
-            gl::DeleteBuffers(1, &vbo);
+            gl::DeleteBuffers(1, &quad_vbo);
+            gl::DeleteBuffers(1, &quads_vbo);
         }
     }
 }
@@ -136,13 +169,15 @@ const VERT: &[u8] = b"
 
 uniform uvec2 res;
 
-layout(location = 0) in vec2 pos;
-layout(location = 1) in vec4 col;
+layout(location = 0) in vec2 uv;
+layout(location = 1) in vec2 pos;
+layout(location = 2) in vec2 size;
+layout(location = 3) in vec4 col;
 
 out vec4 v_col;
 
 void main() {
-    vec2 scaled = 2.0 * pos / vec2(res);
+    vec2 scaled = 2.0 * (pos + uv * size) / vec2(res);
     gl_Position = vec4(scaled.x - 1.0, 1.0 - scaled.y, 0.0, 1.0);
     v_col = col;
 }
