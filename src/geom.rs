@@ -57,14 +57,6 @@ impl Vec2 {
             y: self.y.max(other.y),
         }
     }
-
-    #[inline]
-    pub fn pixel_to_ndc(self, screen_width: f32, screen_height: f32) -> Vec2 {
-        Vec2 {
-            x: 2.0 * (self.x / screen_width as f32 - 0.5),
-            y: 2.0 * (1.0 - self.y / screen_height as f32 - 0.5),
-        }
-    }
 }
 
 impl ops::Add for Vec2 {
