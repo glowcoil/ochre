@@ -188,7 +188,7 @@ impl Polygon {
             let mut last = self.points[start];
             let mut tile_y_prev = (last.y as u16 / TILE_SIZE as u16) as i16;
             for &point in &self.points[start + 1..end] {
-                if point.y != last.y {
+                if point != last {
                     let x_dir = (point.x - last.x).signum() as i16;
                     let y_dir = (point.y - last.y).signum() as i16;
                     let dtdx = 1.0 / (point.x - last.x);
