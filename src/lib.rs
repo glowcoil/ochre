@@ -1,10 +1,12 @@
 mod geom;
 mod path;
-mod render;
+mod backend;
+mod gl_backend;
 
 pub use geom::*;
 pub use path::*;
-pub use render::*;
+pub use backend::*;
+pub use gl_backend::*;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Color {

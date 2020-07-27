@@ -1,26 +1,19 @@
 use std::ffi::{CStr, CString};
 use gl::types::{GLuint, GLint, GLchar, GLenum, GLvoid, GLsizei};
 
+use crate::{ATLAS_SIZE, Backend, Vertex, Color};
+
 macro_rules! offset {
     ($type:ty, $field:ident) => { &(*(0 as *const $type)).$field as *const _ as usize }
 }
 
-pub const ATLAS_SIZE: usize = 4096;
-
-#[derive(Copy, Clone, Debug)]
-pub struct Vertex {
-    pub pos: [i16; 2],
-    pub uv: [u16; 2],
-    pub col: [u8; 4],
-}
-
-pub struct Renderer {
+pub struct GlBackend {
     prog: Program,
     tex: GLuint,
 }
 
-impl Renderer {
-    pub fn new() -> Renderer {
+impl GlBackend {
+    pub fn new() -> GlBackend {
         let prog = Program::new(
             &CStr::from_bytes_with_nul(VERT).unwrap(),
             &CStr::from_bytes_with_nul(FRAG).unwrap()).unwrap();
@@ -40,27 +33,29 @@ impl Renderer {
             gl::TexImage2D(gl::TEXTURE_2D, 0, gl::R8 as GLint, ATLAS_SIZE as GLint, ATLAS_SIZE as GLint, 0, gl::RED, gl::UNSIGNED_BYTE, std::ptr::null_mut());
         }
 
-        Renderer {
+        GlBackend {
             prog,
             tex,
         }
     }
+}
 
-    pub fn clear(&mut self, col: [f32; 4]) {
+impl Backend for GlBackend {
+    fn clear(&mut self, col: Color) {
         unsafe {
-            gl::ClearColor(col[0], col[1], col[2], col[3]);
+            gl::ClearColor(col.r, col.g, col.b, col.a);
             gl::Clear(gl::COLOR_BUFFER_BIT);
         }
     }
 
-    pub fn upload(&mut self, x: u32, y: u32, width: u32, height: u32, data: &[u8]) {
+    fn upload(&mut self, x: u32, y: u32, width: u32, height: u32, data: &[u8]) {
         assert!((width * height) as usize == data.len());
         unsafe {
             gl::TexSubImage2D(gl::TEXTURE_2D, 0, x as GLint, y as GLint, width as GLsizei, height as GLsizei, gl::RED, gl::UNSIGNED_BYTE, data.as_ptr() as *const std::ffi::c_void);
         }
     }
 
-    pub fn draw(&mut self, vertices: &[Vertex], indices: &[u32], screen_width: u32, screen_height: u32) {
+    fn draw(&mut self, vertices: &[Vertex], indices: &[u16], screen_width: u32, screen_height: u32) {
         let mut vbo: GLuint = 0;
         let mut ibo: GLuint = 0;
         let mut vao: GLuint = 0;
@@ -101,7 +96,7 @@ impl Renderer {
             let tex = gl::GetUniformLocation(self.prog.id, b"tex\0" as *const u8 as *const i8);
             gl::Uniform1i(tex, 0);
 
-            gl::DrawElements(gl::TRIANGLES, indices.len() as GLint, gl::UNSIGNED_INT, 0 as *const std::ffi::c_void);
+            gl::DrawElements(gl::TRIANGLES, indices.len() as GLint, gl::UNSIGNED_SHORT, 0 as *const std::ffi::c_void);
 
             gl::DeleteVertexArrays(1, &vao);
             gl::DeleteBuffers(1, &vbo);
@@ -110,7 +105,7 @@ impl Renderer {
     }
 }
 
-impl Drop for Renderer {
+impl Drop for GlBackend {
     fn drop(&mut self) {
         unsafe {
             gl::DeleteTextures(1, &self.tex);

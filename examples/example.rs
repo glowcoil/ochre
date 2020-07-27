@@ -1,4 +1,4 @@
-use ochre::{Path, Vec2, Vertex, Renderer, TILE_SIZE, ATLAS_SIZE};
+use ochre::{Path, Vec2, Vertex, Color, Backend, GlBackend, TILE_SIZE, ATLAS_SIZE};
 
 fn main() {
     let mut events_loop = glutin::EventsLoop::new();
@@ -30,7 +30,7 @@ fn main() {
     let mut u = 1;
     let mut v = 0;
     for tile in tiles.tiles {
-        let base = vertices.len() as u32;
+        let base = vertices.len() as u16;
         let col = [255, 255, 255, 255];
         vertices.push(Vertex { pos: [tile.x * TILE_SIZE as i16, tile.y * TILE_SIZE as i16], col, uv: [u * TILE_SIZE as u16, v * TILE_SIZE as u16] });
         vertices.push(Vertex { pos: [(tile.x + 1) * TILE_SIZE as i16, tile.y * TILE_SIZE as i16], col, uv: [(u + 1) * TILE_SIZE as u16, v * TILE_SIZE as u16] });
@@ -52,7 +52,7 @@ fn main() {
     }
 
     for span in tiles.spans {
-        let base = vertices.len() as u32;
+        let base = vertices.len() as u16;
         let col = [255, 255, 255, 255];
         vertices.push(Vertex { pos: [span.x * TILE_SIZE as i16, span.y * TILE_SIZE as i16], col, uv: [0, 0] });
         vertices.push(Vertex { pos: [(span.x + span.len) * TILE_SIZE as i16, span.y * TILE_SIZE as i16], col, uv: [0, 0] });
@@ -61,15 +61,15 @@ fn main() {
         indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
 
-    let mut renderer = Renderer::new();
+    let mut backend = GlBackend::new();
 
-    renderer.upload(0, 0, ochre::ATLAS_SIZE as u32, ochre::ATLAS_SIZE as u32, &data);
+    backend.upload(0, 0, ochre::ATLAS_SIZE as u32, ochre::ATLAS_SIZE as u32, &data);
 
     let mut running = true;
     while running {
-        renderer.clear([0.0, 0.0, 0.0, 1.0]);
+        backend.clear(Color::rgba(0.0, 0.0, 0.0, 1.0));
 
-        renderer.draw(&vertices[..], &indices[..], 800, 600);
+        backend.draw(&vertices[..], &indices[..], 800, 600);
         context.swap_buffers().unwrap();
 
         events_loop.poll_events(|event| {
