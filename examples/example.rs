@@ -16,7 +16,7 @@ fn main() {
     path.move_to(Vec2::new(400.0, 300.0))
         .quadratic_to(Vec2::new(500.0, 200.0), Vec2::new(400.0, 100.0))
         .cubic_to(Vec2::new(350.0, 150.0), Vec2::new(100.0, 250.0), Vec2::new(400.0, 300.0));
-    let tiles = path.to_tiles();
+    let tiles = path.fill();
 
     let mut data = vec![0; ATLAS_SIZE * ATLAS_SIZE];
     for row in 0..TILE_SIZE {

@@ -1,6 +1,6 @@
-pub mod geom;
-pub mod path;
-pub mod render;
+mod geom;
+mod path;
+mod render;
 
 pub use geom::*;
 pub use path::*;
