@@ -85,7 +85,7 @@ impl Path {
         self
     }
 
-    fn flatten(&self) -> Polygon {
+    fn flatten(&self, transform: Mat2x2) -> Polygon {
         let mut contours = Vec::new();
         let mut points = Vec::new();
         let mut last = Vec2::new(0.0, 0.0);
@@ -94,18 +94,20 @@ impl Path {
             match command {
                 PathCommand::Move => {
                     contours.push(points.len());
-                    points.push(self.points[i]);
-                    last = self.points[i];
+                    let point = transform * self.points[i];
+                    points.push(point);
+                    last = point;
                     i += 1;
                 }
                 PathCommand::Line => {
-                    points.push(self.points[i]);
-                    last = self.points[i];
+                    let point = transform * self.points[i];
+                    points.push(point);
+                    last = point;
                     i += 1;
                 }
                 PathCommand::Quadratic => {
-                    let control = self.points[i];
-                    let point = self.points[i + 1];
+                    let control = transform * self.points[i];
+                    let point = transform * self.points[i + 1];
                     let a_x = last.x - 2.0 * control.x + point.x;
                     let a_y = last.y - 2.0 * control.y + point.y;
                     let n = ((a_x * a_x + a_y * a_y) / (8.0 * TOLERANCE * TOLERANCE)).sqrt().sqrt() as usize;
@@ -122,9 +124,9 @@ impl Path {
                     i += 2;
                 }
                 PathCommand::Cubic => {
-                    let control1 = self.points[i];
-                    let control2 = self.points[i + 1];
-                    let point = self.points[i + 2];
+                    let control1 = transform * self.points[i];
+                    let control2 = transform * self.points[i + 1];
+                    let point = transform * self.points[i + 2];
                     let a_x = -last.x + 3.0 * control1.x - 3.0 * control2.x + point.x;
                     let b_x = 3.0 * (last.x - 2.0 * control1.x + control2.x);
                     let a_y = -last.y + 3.0 * control1.y - 3.0 * control2.y + point.y;
@@ -158,13 +160,13 @@ impl Path {
         Polygon { contours, points }
     }
 
-    pub fn fill(&self) -> Tiles {
-        self.flatten().rasterize()
+    pub fn fill(&self, position: Vec2, transform: Mat2x2) -> Tiles {
+        self.flatten(transform).rasterize(position)
     }
 }
 
 impl Polygon {
-    fn rasterize(&self) -> Tiles {
+    fn rasterize(&self, position: Vec2) -> Tiles {
         #[derive(Copy, Clone)]
         pub struct Increment {
             x: i16,
@@ -185,9 +187,10 @@ impl Polygon {
         for contour in 0..self.contours.len() {
             let start = self.contours[contour];
             let end = *self.contours.get(contour + 1).unwrap_or(&self.points.len());
-            let mut last = self.points[start];
+            let mut last = self.points[start] + position;
             let mut tile_y_prev = (last.y as u16 / TILE_SIZE as u16) as i16;
             for &point in &self.points[start + 1..end] {
+                let point = point + position;
                 if point != last {
                     let x_dir = (point.x - last.x).signum() as i16;
                     let y_dir = (point.y - last.y).signum() as i16;
