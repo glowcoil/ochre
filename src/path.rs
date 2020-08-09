@@ -91,6 +91,18 @@ impl Path {
         self
     }
 
+    pub fn build(self) -> Path {
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+        Path {
+            id: COUNTER.fetch_add(1, Ordering::Relaxed),
+            commands: self.commands,
+            points: self.points,
+        }
+    }
+}
+
+impl Path {
     fn flatten(&self, transform: Mat2x2) -> Polygon {
         let mut contours = Vec::new();
         let mut points = Vec::new();
