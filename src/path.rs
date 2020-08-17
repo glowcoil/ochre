@@ -18,33 +18,6 @@ enum PathCommand {
     Close,
 }
 
-#[derive(Clone)]
-struct Polygon {
-    contours: Vec<usize>,
-    points: Vec<Vec2>,
-}
-
-#[derive(Clone)]
-pub struct Tiles {
-    pub tiles: Vec<Tile>,
-    pub spans: Vec<Span>,
-    pub data: Vec<u8>,
-}
-
-#[derive(Copy, Clone)]
-pub struct Tile {
-    pub x: i16,
-    pub y: i16,
-    pub index: usize,
-}
-
-#[derive(Copy, Clone)]
-pub struct Span {
-    pub x: i16,
-    pub y: i16,
-    pub len: i16,
-}
-
 impl Path {
     pub fn new() -> Path {
         Path {
@@ -85,7 +58,7 @@ impl Path {
         self
     }
 
-    fn flatten(&self, transform: Mat2x2) -> Polygon {
+    pub fn flatten(&self, transform: Mat2x2) -> Polygon {
         let mut contours = Vec::new();
         let mut points = Vec::new();
         let mut last = Vec2::new(0.0, 0.0);
@@ -163,6 +136,33 @@ impl Path {
     pub fn fill(&self, position: Vec2, transform: Mat2x2) -> Tiles {
         self.flatten(transform).rasterize(position)
     }
+}
+
+#[derive(Clone)]
+pub struct Polygon {
+    contours: Vec<usize>,
+    points: Vec<Vec2>,
+}
+
+#[derive(Clone)]
+pub struct Tiles {
+    pub tiles: Vec<Tile>,
+    pub spans: Vec<Span>,
+    pub data: Vec<u8>,
+}
+
+#[derive(Copy, Clone)]
+pub struct Tile {
+    pub x: i16,
+    pub y: i16,
+    pub index: usize,
+}
+
+#[derive(Copy, Clone)]
+pub struct Span {
+    pub x: i16,
+    pub y: i16,
+    pub len: i16,
 }
 
 impl Polygon {
