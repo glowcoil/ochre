@@ -312,7 +312,7 @@ impl Polygon {
                 for y in 0..TILE_SIZE {
                     let mut accum = prev[y];
                     for x in 0..TILE_SIZE {
-                        tile[y * TILE_SIZE + x] = ((accum + areas[y * TILE_SIZE + x]).abs().min(1.0) * 255.0) as u8;
+                        tile[y * TILE_SIZE + x] = ((accum + areas[y * TILE_SIZE + x]).abs() * 256.0).min(255.0) as u8;
                         accum += heights[y * TILE_SIZE + x];
                     }
                     next[y] = accum;
