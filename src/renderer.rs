@@ -1,16 +1,57 @@
-use crate::{TILE_SIZE, ATLAS_SIZE, DisplayList, Path, Backend, Vertex};
+use std::collections::HashMap;
+
+use crate::{TILE_SIZE, ATLAS_SIZE, DisplayList, Path, Tiles, Backend, Vertex, Vec2, Mat2x2};
+
+const SUBPIXEL_STEPS: usize = 8;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct PathId(usize);
 
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+struct PathKey {
+    id: PathId,
+    offset: [u8; 2],
+    transform: [u8; 16],
+}
+
+impl PathKey {
+    fn new(id: PathId, position: Vec2, transform: Mat2x2) -> PathKey {
+        let mut transform_bytes: [u8; 16] = [0; 16];
+        transform_bytes[0..4].copy_from_slice(&transform.0[0].to_le_bytes());
+        transform_bytes[4..8].copy_from_slice(&transform.0[1].to_le_bytes());
+        transform_bytes[8..12].copy_from_slice(&transform.0[2].to_le_bytes());
+        transform_bytes[12..16].copy_from_slice(&transform.0[3].to_le_bytes());
+
+        PathKey {
+            id,
+            offset: [
+                (position.x.fract() * SUBPIXEL_STEPS as f32) as u8,
+                (position.y.fract() * SUBPIXEL_STEPS as f32) as u8,
+            ],
+            transform: transform_bytes,
+        }
+    }
+}
+
+struct PathEntry {
+    tiles: Tiles,
+    // location: u32,
+}
+
 pub struct Renderer {
     paths: Slab<Path>,
+    cache: HashMap<PathKey, PathEntry>,
+    atlas: Vec<AtlasEntry>,
+    data: Vec<u8>,
 }
 
 impl Renderer {
     pub fn new() -> Renderer {
         Renderer {
             paths: Slab::new(),
+            cache: HashMap::new(),
+            atlas: vec![];
+            data: vec![0; ATLAS_SIZE * ATLAS_SIZE],
         }
     }
 
@@ -37,8 +78,15 @@ impl Renderer {
         let mut indices = Vec::new();
 
         for item in display_list.items.iter() {
-            let path = self.paths.get(item.path.0).unwrap();
-            let tiles = path.fill(item.position, item.transform);
+            let key = PathKey::new(item.path, item.position, item.transform);
+            let entry = if let Some(entry) = self.cache.get(&key) {
+                entry
+            } else {
+                let path = self.paths.get(item.path.0).unwrap();
+                let tiles = path.fill(item.position, item.transform);
+                self.cache.insert(key, PathEntry { tiles });
+                self.cache.get(&key).unwrap()
+            };
 
             let col = [
                 (item.color.r * 256.0).min(255.0) as u8,
@@ -47,7 +95,7 @@ impl Renderer {
                 (item.color.a * 256.0).min(255.0) as u8,
             ];
 
-            for tile in tiles.tiles.iter() {
+            for tile in entry.tiles.tiles.iter() {
                 let base = vertices.len() as u16;
                 vertices.push(Vertex { pos: [tile.x * TILE_SIZE as i16, tile.y * TILE_SIZE as i16], col, uv: [u * TILE_SIZE as u16, v * TILE_SIZE as u16] });
                 vertices.push(Vertex { pos: [(tile.x + 1) * TILE_SIZE as i16, tile.y * TILE_SIZE as i16], col, uv: [(u + 1) * TILE_SIZE as u16, v * TILE_SIZE as u16] });
@@ -57,7 +105,7 @@ impl Renderer {
 
                 for row in 0..TILE_SIZE {
                     for col in 0..TILE_SIZE {
-                        data[v as usize * TILE_SIZE * ATLAS_SIZE + row * ATLAS_SIZE + u as usize * TILE_SIZE + col] = tiles.data[tile.index + row * TILE_SIZE + col];
+                        data[v as usize * TILE_SIZE * ATLAS_SIZE + row * ATLAS_SIZE + u as usize * TILE_SIZE + col] = entry.tiles.data[tile.index + row * TILE_SIZE + col];
                     }
                 }
 
@@ -68,7 +116,7 @@ impl Renderer {
                 }
             }
 
-            for span in tiles.spans {
+            for span in entry.tiles.spans.iter() {
                 let base = vertices.len() as u16;
                 vertices.push(Vertex { pos: [span.x * TILE_SIZE as i16, span.y * TILE_SIZE as i16], col, uv: [0, 0] });
                 vertices.push(Vertex { pos: [(span.x + span.len) * TILE_SIZE as i16, span.y * TILE_SIZE as i16], col, uv: [0, 0] });

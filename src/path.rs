@@ -133,6 +133,43 @@ impl Path {
         Polygon { contours, points }
     }
 
+    // pub fn stroke(&self, width: f32) -> Path {
+    //     let mut path = Path::new();
+
+    //     for contour in self.contours.iter() {
+    //         let mut points = Vec::new();
+    //         points.extend_from_slice(&contour.points);
+    //         points.extend(contour.points.iter().rev());
+    //         for i in 0..contour.points.len() {
+    //             let prev = points[(i + points.len() - 1) % contour.points.len()];
+    //             let curr = points[i];
+    //             let next = points[(i + 1) % contour.points.len()];
+    //             let prev_tan = (curr - prev).normalized();
+    //             let next_tan = (next - curr).normalized();
+    //             let prev_nor = Vec2::new(-prev_tan.y, prev_tan.x);
+    //             let next_nor = Vec2::new(-next_tan.y, next_tan.x);
+    //             if curr != prev && curr != next {
+    //                 points[i] += 0.5 * width * (prev_nor + next_nor) * (1.0 / (1.0 + prev_nor.dot(next_nor))).min(2.0);
+    //             }
+    //         }
+    //         for i in 0..contour.points.len() {
+    //             let prev = points[contour.points.len() + (i + contour.points.len() - 1) % contour.points.len()];
+    //             let curr = points[contour.points.len() + i];
+    //             let next = points[contour.points.len() + (i + 1) % contour.points.len()];
+    //             let prev_tan = (curr - prev).normalized();
+    //             let next_tan = (next - curr).normalized();
+    //             let prev_nor = Vec2::new(-prev_tan.y, prev_tan.x);
+    //             let next_nor = Vec2::new(-next_tan.y, next_tan.x);
+    //             if curr != prev && curr != next {
+    //                 points[contour.points.len() + i] += 0.5 * width * (prev_nor + next_nor) * (1.0 / (1.0 + prev_nor.dot(next_nor))).min(2.0);
+    //             }
+    //         }
+    //         path.contours.push(Contour { points, closed: true });
+    //     }
+
+    //     path
+    // }
+
     pub fn fill(&self, position: Vec2, transform: Mat2x2) -> Tiles {
         self.flatten(transform).rasterize(position)
     }

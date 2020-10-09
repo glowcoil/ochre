@@ -22,12 +22,40 @@ fn main() {
     let path_id = renderer.add_path(path);
 
     let mut display_list = DisplayList::new();
-    display_list.fill(path_id, Vec2::new(0.0, 0.0), Mat2x2::id(), Color::rgba(1.0, 1.0, 1.0, 1.0));
+    display_list.fill(path_id, Vec2::new(0.0, 0.0), Mat2x2::id(), Color::rgba(0.0, 1.0, 1.0, 1.0));
+    display_list.fill(path_id, Vec2::new(0.0, 0.0), Mat2x2::id(), Color::rgba(0.0, 1.0, 1.0, 1.0));
+    display_list.fill(path_id, Vec2::new(0.0, 0.0), Mat2x2::id(), Color::rgba(0.0, 1.0, 1.0, 1.0));
+    display_list.fill(path_id, Vec2::new(0.0, 0.0), Mat2x2::id(), Color::rgba(0.0, 1.0, 1.0, 1.0));
+    display_list.fill(path_id, Vec2::new(0.0, 0.0), Mat2x2::id(), Color::rgba(0.0, 1.0, 1.0, 1.0));
 
     let mut running = true;
     while running {
         backend.clear(Color::rgba(0.0, 0.0, 0.0, 1.0));
+
+        let mut query: u32 = 0;
+        unsafe {
+            gl::GenQueries(1, &mut query);
+            gl::BeginQuery(gl::TIME_ELAPSED, query);
+        }
+
+        let time = std::time::Instant::now();
         renderer.submit(&display_list, &mut backend);
+        dbg!(time.elapsed());
+
+
+        
+        let mut elapsed: u64 = 0;
+        unsafe {
+            gl::EndQuery(gl::TIME_ELAPSED);
+            let mut available: i32 = 0;
+            while available == 0 {
+                gl::GetQueryObjectiv(query, gl::QUERY_RESULT_AVAILABLE, &mut available);
+            }
+            gl::GetQueryObjectui64v(query, gl::QUERY_RESULT, &mut elapsed);
+        }
+        
+        println!("{}", elapsed);
+
         context.swap_buffers().unwrap();
 
         events_loop.poll_events(|event| {
