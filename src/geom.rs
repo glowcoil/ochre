@@ -125,7 +125,7 @@ impl ops::MulAssign<f32> for Vec2 {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct Mat2x2([f32; 4]);
+pub struct Mat2x2(pub [f32; 4]);
 
 impl Mat2x2 {
     /* row-major order */
