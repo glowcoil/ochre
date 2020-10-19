@@ -59,7 +59,7 @@ fn main() {
                             color.blue as f32 / 255.0,
                             fill.opacity.value() as f32,
                         );
-                        picture.fill(&path, Vec2::new(0.0, 0.0), Mat2x2::scale(1.0), color);
+                        picture.fill(&path, Vec2::new(0.0, 0.0), Mat2x2::scale(2.0), color);
                     }
                 }
                 // if let Some(ref stroke) = p.stroke {

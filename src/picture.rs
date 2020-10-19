@@ -4,7 +4,7 @@ pub struct Picture {
     pub(crate) layers: Vec<Layer>,
     pub(crate) tiles: Vec<Tile>,
     pub(crate) spans: Vec<Span>,
-    pub(crate) data: Vec<u8>,
+    pub(crate) data: Vec<u64>,
 }
 
 pub(crate) struct Layer {
@@ -187,7 +187,10 @@ impl Picture {
                     next[y] = accum;
                 }
                 self.tiles.push(Tile { x: bin.tile_x, y: bin.tile_y });
-                self.data.extend_from_slice(&tile);
+                for row in 0..TILE_SIZE {
+                    use std::convert::TryInto;
+                    self.data.push(u64::from_le_bytes(tile[row * TILE_SIZE..(row + 1) * TILE_SIZE].try_into().unwrap()));
+                }
                 areas = [0.0; TILE_SIZE * TILE_SIZE];
                 heights = [0.0; TILE_SIZE * TILE_SIZE];
                 if i + 1 < bins.len() && bins[i + 1].tile_y == bin.tile_y {
