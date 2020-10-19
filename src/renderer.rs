@@ -1,4 +1,4 @@
-use crate::{TILE_SIZE, ATLAS_SIZE, Backend, Color, Mat2x2, Path, Vec2, Vertex};
+use crate::{TILE_SIZE, ATLAS_SIZE, Backend, Picture, Vertex};
 
 pub struct Renderer {
     data: Vec<u8>,
@@ -26,44 +26,72 @@ impl Renderer {
         }
     }
 
-    pub fn fill(&mut self, path: &Path, position: Vec2, transform: Mat2x2, color: Color) {
-        let col = [
-            (color.r * 256.0).min(255.0) as u8,
-            (color.g * 256.0).min(255.0) as u8,
-            (color.b * 256.0).min(255.0) as u8,
-            (color.a * 256.0).min(255.0) as u8,
-        ];
+    pub fn draw(&mut self, picture: &Picture) {
+        let mut tiles_start = 0;
+        let mut spans_start = 0;
 
-        let tiles = path.fill(position, transform);
-        for tile in tiles.tiles {
-            let base = self.vertices.len() as u16;
-            self.vertices.push(Vertex { pos: [tile.x * TILE_SIZE as i16, tile.y * TILE_SIZE as i16], col, uv: [self.next_col * TILE_SIZE as u16, self.next_row * TILE_SIZE as u16] });
-            self.vertices.push(Vertex { pos: [(tile.x + 1) * TILE_SIZE as i16, tile.y * TILE_SIZE as i16], col, uv: [(self.next_col + 1) * TILE_SIZE as u16, self.next_row * TILE_SIZE as u16] });
-            self.vertices.push(Vertex { pos: [(tile.x + 1) * TILE_SIZE as i16, (tile.y + 1) * TILE_SIZE as i16], col, uv: [(self.next_col + 1) * TILE_SIZE as u16, (self.next_row + 1) * TILE_SIZE as u16] });
-            self.vertices.push(Vertex { pos: [tile.x * TILE_SIZE as i16, (tile.y + 1) * TILE_SIZE as i16], col, uv: [self.next_col * TILE_SIZE as u16, (self.next_row + 1) * TILE_SIZE as u16] });
-            self.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+        let mut tile_index = 0;
 
-            for row in 0..TILE_SIZE {
-                for col in 0..TILE_SIZE {
-                    self.data[self.next_row as usize * TILE_SIZE * ATLAS_SIZE + row * ATLAS_SIZE + self.next_col as usize * TILE_SIZE + col] = tiles.data[tile.index + row * TILE_SIZE + col];
-                }
+        for layer in picture.layers.iter() {
+            let col = [
+                (layer.color.r * 256.0).min(255.0) as u8,
+                (layer.color.g * 256.0).min(255.0) as u8,
+                (layer.color.b * 256.0).min(255.0) as u8,
+                (layer.color.a * 256.0).min(255.0) as u8,
+            ];
+
+            for tile in picture.tiles[tiles_start..tiles_start + layer.tiles].iter() {
+                let base = self.vertices.len() as u16;
+
+                let x1 = tile.x * TILE_SIZE as i16;
+                let x2 = (tile.x + 1) * TILE_SIZE as i16;
+                let y1 = tile.y * TILE_SIZE as i16;
+                let y2 = (tile.y + 1) * TILE_SIZE as i16;
+
+                let u1 = self.next_col * TILE_SIZE as u16;
+                let u2 = (self.next_col + 1) * TILE_SIZE as u16;
+                let v1 = self.next_row * TILE_SIZE as u16;
+                let v2 = (self.next_row + 1) * TILE_SIZE as u16;
+
+                self.vertices.push(Vertex { pos: [x1, y1], col, uv: [u1, v1] });
+                self.vertices.push(Vertex { pos: [x2, y1], col, uv: [u2, v1] });
+                self.vertices.push(Vertex { pos: [x2, y2], col, uv: [u2, v2] });
+                self.vertices.push(Vertex { pos: [x1, y2], col, uv: [u1, v2] });
+                self.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+
+                // for row in 0..TILE_SIZE {
+                //     for col in 0..TILE_SIZE {
+                //         self.data[self.next_row as usize * TILE_SIZE * ATLAS_SIZE + row * ATLAS_SIZE + self.next_col as usize * TILE_SIZE + col] = picture.data[tile_index + row * TILE_SIZE + col];
+                //     }
+                // }
+                // tile_index += TILE_SIZE * TILE_SIZE;
+
+                // self.next_col += 1;
+                // if self.next_col as usize == ATLAS_SIZE / TILE_SIZE {
+                //     self.next_col = 0;
+                //     self.next_row += 1;
+                //     self.data.resize(self.data.len() + ATLAS_SIZE * TILE_SIZE, 0);
+                // }
             }
 
-            self.next_col += 1;
-            if self.next_col as usize == ATLAS_SIZE / TILE_SIZE {
-                self.next_col = 0;
-                self.next_row += 1;
-                self.data.resize(self.data.len() + ATLAS_SIZE * TILE_SIZE, 0);
-            }
-        }
+            tiles_start += layer.tiles;
 
-        for span in tiles.spans {
-            let base = self.vertices.len() as u16;
-            self.vertices.push(Vertex { pos: [span.x * TILE_SIZE as i16, span.y * TILE_SIZE as i16], col, uv: [0, 0] });
-            self.vertices.push(Vertex { pos: [(span.x + span.len) * TILE_SIZE as i16, span.y * TILE_SIZE as i16], col, uv: [0, 0] });
-            self.vertices.push(Vertex { pos: [(span.x + span.len) * TILE_SIZE as i16, (span.y + 1) * TILE_SIZE as i16], col, uv: [0, 0] });
-            self.vertices.push(Vertex { pos: [span.x * TILE_SIZE as i16, (span.y + 1) * TILE_SIZE as i16], col, uv: [0, 0] });
-            self.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+            for span in picture.spans[spans_start..spans_start + layer.spans].iter() {
+                let base = self.vertices.len() as u16;
+
+                let x1 = span.x * TILE_SIZE as i16;
+                let x2 = (span.x + span.len) * TILE_SIZE as i16;
+                let y1 = span.y * TILE_SIZE as i16;
+                let y2 = (span.y + 1) * TILE_SIZE as i16;
+
+                self.vertices.push(Vertex { pos: [x1, y1], col, uv: [0, 0] });
+                self.vertices.push(Vertex { pos: [x2, y1], col, uv: [0, 0] });
+                self.vertices.push(Vertex { pos: [x2, y2], col, uv: [0, 0] });
+                self.vertices.push(Vertex { pos: [x1, y2], col, uv: [0, 0] });
+                self.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+            }
+
+            spans_start += layer.spans;
         }
     }
 
