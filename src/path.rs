@@ -4,23 +4,17 @@ const TOLERANCE: f32 = 0.1;
 
 #[derive(Clone)]
 pub struct Path {
-    commands: Vec<PathCommand>,
-    points: Vec<Vec2>,
+    pub(crate) commands: Vec<PathCommand>,
+    pub(crate) points: Vec<Vec2>,
 }
 
 #[derive(Copy, Clone)]
-enum PathCommand {
+pub(crate) enum PathCommand {
     Move,
     Line,
     Quadratic,
     Cubic,
     Close,
-}
-
-#[derive(Clone)]
-pub(crate) struct Polygon {
-    pub(crate) contours: Vec<usize>,
-    pub(crate) points: Vec<Vec2>,
 }
 
 impl Path {
@@ -63,27 +57,21 @@ impl Path {
         self
     }
 
-    pub(crate) fn flatten(&self, transform: Mat2x2) -> Polygon {
-        let mut contours = Vec::new();
-        let mut points = Vec::new();
-        let mut last = Vec2::new(0.0, 0.0);
+    pub fn flatten(&self, transform: Mat2x2) -> Path {
+        let mut path = Path::new();
         let mut i = 0;
         for command in self.commands.iter() {
             match command {
                 PathCommand::Move => {
-                    contours.push(points.len());
-                    let point = transform * self.points[i];
-                    points.push(point);
-                    last = point;
+                    path.move_to(transform * self.points[i]);
                     i += 1;
                 }
                 PathCommand::Line => {
-                    let point = transform * self.points[i];
-                    points.push(point);
-                    last = point;
+                    path.line_to(transform * self.points[i]);
                     i += 1;
                 }
                 PathCommand::Quadratic => {
+                    let last = *path.points.last().unwrap_or(&Vec2::new(0.0, 0.0));
                     let control = transform * self.points[i];
                     let point = transform * self.points[i + 1];
                     let a_x = last.x - 2.0 * control.x + point.x;
@@ -95,13 +83,13 @@ impl Path {
                         t += dt;
                         let p01 = Vec2::lerp(t, last, control);
                         let p12 = Vec2::lerp(t, control, point);
-                        points.push(Vec2::lerp(t, p01, p12));
+                        path.line_to(Vec2::lerp(t, p01, p12));
                     }
-                    points.push(point);
-                    last = point;
+                    path.line_to(point);
                     i += 2;
                 }
                 PathCommand::Cubic => {
+                    let last = *path.points.last().unwrap_or(&Vec2::new(0.0, 0.0));
                     let control1 = transform * self.points[i];
                     let control2 = transform * self.points[i + 1];
                     let point = transform * self.points[i + 2];
@@ -120,22 +108,18 @@ impl Path {
                         let p23 = Vec2::lerp(t, control2, point);
                         let p012 = Vec2::lerp(t, p01, p12);
                         let p123 = Vec2::lerp(t, p12, p23);
-                        points.push(Vec2::lerp(t, p012, p123));
+                        path.line_to(Vec2::lerp(t, p012, p123));
                     }
-                    points.push(point);
-                    last = point;
+                    path.line_to(point);
                     i += 3;
                 }
                 PathCommand::Close => {
-                    let first = points[*contours.last().unwrap()];
-                    if last != first {
-                        points.push(first);
-                    }
+                    path.close();
                 }
             }
         }
 
-        Polygon { contours, points }
+        path
     }
 
 }

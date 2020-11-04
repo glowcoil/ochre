@@ -1,4 +1,4 @@
-use crate::{Mat2x2, Path, Vec2};
+use crate::{Mat2x2, Path, PathCommand, Vec2};
 
 pub const TILE_SIZE: usize = 8;
 pub const ATLAS_SIZE: usize = 4096;
@@ -64,82 +64,96 @@ impl Picture {
             sign: i8,
         }
 
-        let polygon = path.flatten(transform);
+        let flattened = path.flatten(transform);
 
         let mut increments = Vec::new();
         let mut tile_increments = Vec::new();
-        for contour in 0..polygon.contours.len() {
-            let start = polygon.contours[contour];
-            let end = *polygon.contours.get(contour + 1).unwrap_or(&polygon.points.len());
-            let mut last = polygon.points[start] + position;
-            let mut tile_y_prev = (last.y as u16 / TILE_SIZE as u16) as i16;
-            for &point in &polygon.points[start + 1..end] {
-                let point = point + position;
-                if point != last {
-                    let x_dir = (point.x - last.x).signum() as i16;
-                    let y_dir = (point.y - last.y).signum() as i16;
-                    let dtdx = 1.0 / (point.x - last.x);
-                    let dtdy = 1.0 / (point.y - last.y);
-                    let mut x = last.x as u16 as i16;
-                    let mut y = last.y as u16 as i16;
-                    let mut row_t0: f32 = 0.0;
-                    let mut col_t0: f32 = 0.0;
-                    let mut row_t1 = if last.y == point.y {
-                        std::f32::INFINITY
-                    } else {
-                        let next_y = if point.y > last.y { (y + 1) as f32 } else { y as f32 };
-                        (dtdy * (next_y - last.y)).min(1.0)
-                    };
-                    let mut col_t1 = if last.x == point.x {
-                        std::f32::INFINITY
-                    } else {
-                        let next_x = if point.x > last.x { (x + 1) as f32 } else { x as f32 };
-                        (dtdx * (next_x - last.x)).min(1.0)
-                    };
-                    let x_step = dtdx.abs();
-                    let y_step = dtdy.abs();
+        let mut first = Vec2::new(0.0, 0.0);
+        let mut last = Vec2::new(0.0, 0.0);
+        for (&command, &point) in flattened.commands.iter().zip(flattened.points.iter()) {
+            let p1;
+            let p2;
+            match command {
+                PathCommand::Move => {
+                    p1 = last + position;
+                    p2 = first + position;
+                    first = point;
+                    last = point;
+                }
+                PathCommand::Line => {
+                    p1 = last + position;
+                    p2 = point + position;
+                    last = point;
+                }
+                _ => {
+                    unreachable!();
+                }
+            }
 
-                    loop {
-                        let t0 = row_t0.max(col_t0);
-                        let t1 = row_t1.min(col_t1);
-                        let p0 = (1.0 - t0) * last + t0 * point;
-                        let p1 = (1.0 - t1) * last + t1 * point;
-                        let height = p1.y - p0.y;
-                        let right = (x + 1) as f32;
-                        let area = 0.5 * height * ((right - p0.x) + (right - p1.x));
+            if p1 != p2 {
+                let x_dir = (p2.x - p1.x).signum() as i16;
+                let y_dir = (p2.y - p1.y).signum() as i16;
+                let dtdx = 1.0 / (p2.x - p1.x);
+                let dtdy = 1.0 / (p2.y - p1.y);
+                let mut x = p1.x as u16 as i16;
+                let mut y = p1.y as u16 as i16;
+                let mut tile_y_prev = (y as u16 / TILE_SIZE as u16) as i16;
+                let mut row_t0: f32 = 0.0;
+                let mut col_t0: f32 = 0.0;
+                let mut row_t1 = if p1.y == p2.y {
+                    std::f32::INFINITY
+                } else {
+                    let next_y = if p2.y > p1.y { (y + 1) as f32 } else { y as f32 };
+                    (dtdy * (next_y - p1.y)).min(1.0)
+                };
+                let mut col_t1 = if p1.x == p2.x {
+                    std::f32::INFINITY
+                } else {
+                    let next_x = if p2.x > p1.x { (x + 1) as f32 } else { x as f32 };
+                    (dtdx * (next_x - p1.x)).min(1.0)
+                };
+                let x_step = dtdx.abs();
+                let y_step = dtdy.abs();
 
-                        increments.push(Increment { x, y, area, height });
+                loop {
+                    let t0 = row_t0.max(col_t0);
+                    let t1 = row_t1.min(col_t1);
+                    let p0 = (1.0 - t0) * p1 + t0 * p2;
+                    let p1 = (1.0 - t1) * p1 + t1 * p2;
+                    let height = p1.y - p0.y;
+                    let right = (x + 1) as f32;
+                    let area = 0.5 * height * ((right - p0.x) + (right - p1.x));
 
-                        let tile_y = (y as u16 / TILE_SIZE as u16) as i16;
-                        if tile_y != tile_y_prev {
-                            tile_increments.push(TileIncrement {
-                                tile_x: (x as u16 / TILE_SIZE as u16) as i16,
-                                tile_y: tile_y_prev.min(tile_y),
-                                sign: (tile_y - tile_y_prev) as i8,
-                            });
-                        }
-                        tile_y_prev = tile_y;
+                    increments.push(Increment { x, y, area, height });
 
-                        if row_t1 < col_t1 {
-                            row_t0 = row_t1;
-                            row_t1 = (row_t1 + y_step).min(1.0);
-                            if row_t0 == 1.0 {
-                                break;
-                            } else {
-                                y += y_dir;
-                            }
+                    let tile_y = (y as u16 / TILE_SIZE as u16) as i16;
+                    if tile_y != tile_y_prev {
+                        tile_increments.push(TileIncrement {
+                            tile_x: (x as u16 / TILE_SIZE as u16) as i16,
+                            tile_y: tile_y_prev.min(tile_y),
+                            sign: (tile_y - tile_y_prev) as i8,
+                        });
+                    }
+                    tile_y_prev = tile_y;
+
+                    if row_t1 < col_t1 {
+                        row_t0 = row_t1;
+                        row_t1 = (row_t1 + y_step).min(1.0);
+                        if row_t0 == 1.0 {
+                            break;
                         } else {
-                            col_t0 = col_t1;
-                            col_t1 = (col_t1 + x_step).min(1.0);
-                            if col_t0 == 1.0 {
-                                break;
-                            } else {
-                                x += x_dir;
-                            }
+                            y += y_dir;
+                        }
+                    } else {
+                        col_t0 = col_t1;
+                        col_t1 = (col_t1 + x_step).min(1.0);
+                        if col_t0 == 1.0 {
+                            break;
+                        } else {
+                            x += x_dir;
                         }
                     }
                 }
-                last = point;
             }
         }
 
