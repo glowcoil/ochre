@@ -68,26 +68,37 @@ impl Picture {
 
         let mut increments = Vec::new();
         let mut tile_increments = Vec::new();
-        let mut first = Vec2::new(0.0, 0.0);
-        let mut last = Vec2::new(0.0, 0.0);
-        for (&command, &point) in flattened.commands.iter().zip(flattened.points.iter()) {
+        let mut first = position;
+        let mut last = position;
+        let mut commands = flattened.commands.iter();
+        let mut points = flattened.points.iter();
+        loop {
+            let command = commands.next();
+
             let p1;
             let p2;
-            match command {
-                PathCommand::Move => {
-                    p1 = last + position;
-                    p2 = first + position;
-                    first = point;
-                    last = point;
+            if let Some(command) = command {
+                match command {
+                    PathCommand::Move => {
+                        let point = *points.next().unwrap() + position;
+                        p1 = last;
+                        p2 = first;
+                        first = point;
+                        last = point;
+                    }
+                    PathCommand::Line => {
+                        let point = *points.next().unwrap() + position;
+                        p1 = last;
+                        p2 = point;
+                        last = point;
+                    }
+                    _ => {
+                        continue;
+                    }
                 }
-                PathCommand::Line => {
-                    p1 = last + position;
-                    p2 = point + position;
-                    last = point;
-                }
-                _ => {
-                    unreachable!();
-                }
+            } else {
+                p1 = last;
+                p2 = first;
             }
 
             if p1 != p2 {
@@ -155,6 +166,8 @@ impl Picture {
                     }
                 }
             }
+
+            if command.is_none() { break; }
         }
 
         #[derive(Copy, Clone)]
