@@ -300,6 +300,10 @@ impl Picture {
         }
     }
 
+    pub fn stroke(&mut self, path: &Path, width: f32, position: Vec2, transform: Mat2x2, color: Color) {
+        self.fill(&path.flatten(Mat2x2::id()).stroke(width), position, transform, color);
+    }
+
     pub fn vertices(&self) -> &[Vertex] {
         &self.vertices
     }
