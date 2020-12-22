@@ -1,4 +1,4 @@
-use crate::{Mat2x2, Path, PathCommand, Vec2};
+use crate::{Path, PathCommand, Transform, Vec2};
 
 pub const TILE_SIZE: usize = 8;
 pub const ATLAS_SIZE: usize = 4096;
@@ -48,7 +48,7 @@ impl Picture {
         }
     }
 
-    pub fn fill(&mut self, path: &Path, position: Vec2, transform: Mat2x2, color: Color) {
+    pub fn fill(&mut self, path: &Path, transform: Transform, color: Color) {
         #[derive(Copy, Clone)]
         pub struct Increment {
             x: i16,
@@ -68,8 +68,8 @@ impl Picture {
 
         let mut increments = Vec::new();
         let mut tile_increments = Vec::new();
-        let mut first = position;
-        let mut last = position;
+        let mut first = transform.offset;
+        let mut last = transform.offset;
         let mut tile_y_prev = 0;
         let mut commands = flattened.commands.iter();
         let mut points = flattened.points.iter();
@@ -81,7 +81,7 @@ impl Picture {
             if let Some(command) = command {
                 match command {
                     PathCommand::Move => {
-                        let point = *points.next().unwrap() + position;
+                        let point = *points.next().unwrap();
                         p1 = last;
                         p2 = first;
                         first = point;
@@ -89,7 +89,7 @@ impl Picture {
                         tile_y_prev = (point.y as u16 / TILE_SIZE as u16) as i16;
                     }
                     PathCommand::Line => {
-                        let point = *points.next().unwrap() + position;
+                        let point = *points.next().unwrap();
                         p1 = last;
                         p2 = point;
                         last = point;
@@ -301,8 +301,8 @@ impl Picture {
         }
     }
 
-    pub fn stroke(&mut self, path: &Path, width: f32, position: Vec2, transform: Mat2x2, color: Color) {
-        self.fill(&path.flatten(Mat2x2::id()).stroke(width), position, transform, color);
+    pub fn stroke(&mut self, path: &Path, width: f32, transform: Transform, color: Color) {
+        self.fill(&path.flatten(Transform::id()).stroke(width), transform, color);
     }
 
     pub fn vertices(&self) -> &[Vertex] {

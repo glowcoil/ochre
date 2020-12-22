@@ -1,4 +1,4 @@
-use ochre::{Path, Vec2, Mat2x2, Picture, Color, GlBackend};
+use ochre::{Path, Vec2, Transform, Picture, Color, GlBackend};
 
 fn main() {
     let mut events_loop = glutin::EventsLoop::new();
@@ -18,7 +18,7 @@ fn main() {
         .cubic_to(Vec2::new(350.0, 150.0), Vec2::new(100.0, 250.0), Vec2::new(400.0, 300.0));
 
     let mut picture = Picture::new();
-    picture.fill(&path, Vec2::new(0.0, 0.0), Mat2x2::id(), Color::rgba(1.0, 1.0, 1.0, 1.0));
+    picture.fill(&path, Transform::id(), Color::rgba(1.0, 1.0, 1.0, 1.0));
 
     let mut backend = GlBackend::new();
 

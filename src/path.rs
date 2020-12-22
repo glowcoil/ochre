@@ -97,24 +97,24 @@ impl Path {
         self
     }
 
-    pub fn flatten(&self, transform: Mat2x2) -> Path {
+    pub fn flatten(&self, transform: Transform) -> Path {
         let mut path = Path::new();
         let mut i = 0;
         let mut weight_i = 0;
         for command in self.commands.iter() {
             match command {
                 PathCommand::Move => {
-                    path.move_to(transform * self.points[i]);
+                    path.move_to(transform.apply(self.points[i]));
                     i += 1;
                 }
                 PathCommand::Line => {
-                    path.line_to(transform * self.points[i]);
+                    path.line_to(transform.apply(self.points[i]));
                     i += 1;
                 }
                 PathCommand::Quadratic => {
                     let last = *path.points.last().unwrap_or(&Vec2::new(0.0, 0.0));
-                    let control = transform * self.points[i];
-                    let point = transform * self.points[i + 1];
+                    let control = transform.apply(self.points[i]);
+                    let point = transform.apply(self.points[i + 1]);
                     let dt = ((4.0 * TOLERANCE) / (last - 2.0 * control + point).length()).sqrt();
                     let mut t = 0.0;
                     while t < 1.0 {
@@ -127,9 +127,9 @@ impl Path {
                 }
                 PathCommand::Cubic => {
                     let last = *path.points.last().unwrap_or(&Vec2::new(0.0, 0.0));
-                    let control1 = transform * self.points[i];
-                    let control2 = transform * self.points[i + 1];
-                    let point = transform * self.points[i + 2];
+                    let control1 = transform.apply(self.points[i]);
+                    let control2 = transform.apply(self.points[i + 1]);
+                    let point = transform.apply(self.points[i + 2]);
                     let a = -1.0 * last + 3.0 * control1 - 3.0 * control2 + point;
                     let b = 3.0 * (last - 2.0 * control1 + control2);
                     let conc = b.length().max((a + b).length());
@@ -148,8 +148,8 @@ impl Path {
                 }
                 PathCommand::Conic => {
                     let last = *path.points.last().unwrap_or(&Vec2::new(0.0, 0.0));
-                    let control = transform * self.points[i];
-                    let point = transform * self.points[i + 1];
+                    let control = transform.apply(self.points[i]);
+                    let point = transform.apply(self.points[i + 1]);
                     let weight = self.weights[weight_i];
 
                     fn flatten_conic(

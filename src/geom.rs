@@ -117,14 +117,7 @@ impl ops::Mul<Vec2> for f32 {
     }
 }
 
-impl ops::MulAssign<f32> for Vec2 {
-    #[inline]
-    fn mul_assign(&mut self, other: f32) {
-        *self = *self * other;
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Mat2x2([f32; 4]);
 
 impl Mat2x2 {
@@ -170,13 +163,6 @@ impl ops::Mul<Vec2> for Mat2x2 {
     }
 }
 
-impl ops::MulAssign<Mat2x2> for Vec2 {
-    #[inline]
-    fn mul_assign(&mut self, other: Mat2x2) {
-        *self = other * *self;
-    }
-}
-
 impl ops::Mul<Mat2x2> for f32 {
     type Output = Mat2x2;
     #[inline]
@@ -198,9 +184,56 @@ impl ops::Mul<f32> for Mat2x2 {
     }
 }
 
-impl ops::MulAssign<f32> for Mat2x2 {
-    #[inline]
-    fn mul_assign(&mut self, other: f32) {
-        *self = *self * other;
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Transform {
+    pub matrix: Mat2x2,
+    pub offset: Vec2,
+}
+
+impl Transform {
+    pub fn new(matrix: Mat2x2, offset: Vec2) -> Transform {
+        Transform {
+            matrix,
+            offset,
+        }
+    }
+
+    pub fn id() -> Transform {
+        Transform {
+            matrix: Mat2x2::id(),
+            offset: Vec2::new(0.0, 0.0),
+        }
+    }
+
+    pub fn translate(x: f32, y: f32) -> Transform {
+        Transform {
+            matrix: Mat2x2::id(),
+            offset: Vec2::new(x, y),
+        }
+    }
+
+    pub fn scale(scale: f32) -> Transform {
+        Transform {
+            matrix: Mat2x2::scale(scale),
+            offset: Vec2::new(0.0, 0.0),
+        }
+    }
+
+    pub fn rotate(angle: f32) -> Transform {
+        Transform {
+            matrix: Mat2x2::rotate(angle),
+            offset: Vec2::new(0.0, 0.0),
+        }
+    }
+
+    pub fn then(self, transform: Transform) -> Transform {
+        Transform {
+            matrix: transform.matrix * self.matrix,
+            offset: transform.matrix * self.offset + transform.offset,
+        }
+    }
+
+    pub fn apply(self, vec: Vec2) -> Vec2 {
+        self.matrix * vec + self.offset
     }
 }
