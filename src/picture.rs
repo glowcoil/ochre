@@ -70,6 +70,7 @@ impl Picture {
         let mut tile_increments = Vec::new();
         let mut first = position;
         let mut last = position;
+        let mut tile_y_prev = 0;
         let mut commands = flattened.commands.iter();
         let mut points = flattened.points.iter();
         loop {
@@ -85,6 +86,7 @@ impl Picture {
                         p2 = first;
                         first = point;
                         last = point;
+                        tile_y_prev = (point.y as u16 / TILE_SIZE as u16) as i16;
                     }
                     PathCommand::Line => {
                         let point = *points.next().unwrap() + position;
@@ -108,7 +110,6 @@ impl Picture {
                 let dtdy = 1.0 / (p2.y - p1.y);
                 let mut x = p1.x as u16 as i16;
                 let mut y = p1.y as u16 as i16;
-                let mut tile_y_prev = (y as u16 / TILE_SIZE as u16) as i16;
                 let mut row_t0: f32 = 0.0;
                 let mut col_t0: f32 = 0.0;
                 let mut row_t1 = if p1.y == p2.y {
@@ -144,8 +145,8 @@ impl Picture {
                             tile_y: tile_y_prev.min(tile_y),
                             sign: (tile_y - tile_y_prev) as i8,
                         });
+                        tile_y_prev = tile_y;
                     }
-                    tile_y_prev = tile_y;
 
                     if row_t1 < col_t1 {
                         row_t0 = row_t1;
