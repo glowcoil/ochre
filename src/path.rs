@@ -6,6 +6,7 @@ const TOLERANCE: f32 = 0.1;
 pub struct Path {
     pub(crate) commands: Vec<PathCommand>,
     pub(crate) points: Vec<Vec2>,
+    pub(crate) weights: Vec<f32>,
 }
 
 #[derive(Copy, Clone)]
@@ -14,6 +15,7 @@ pub(crate) enum PathCommand {
     Line,
     Quadratic,
     Cubic,
+    Conic,
     Close,
 }
 
@@ -22,6 +24,7 @@ impl Path {
         Path {
             commands: Vec::new(),
             points: Vec::new(),
+            weights: Vec::new(),
         }
     }
 
@@ -52,6 +55,14 @@ impl Path {
         self
     }
 
+    pub fn conic_to(&mut self, control: Vec2, point: Vec2, weight: f32) -> &mut Self {
+        self.commands.push(PathCommand::Conic);
+        self.points.push(control);
+        self.points.push(point);
+        self.weights.push(weight);
+        self
+    }
+
     pub fn close(&mut self) -> &mut Self {
         self.commands.push(PathCommand::Close);
         self
@@ -60,6 +71,7 @@ impl Path {
     pub fn flatten(&self, transform: Mat2x2) -> Path {
         let mut path = Path::new();
         let mut i = 0;
+        let mut weight_i = 0;
         for command in self.commands.iter() {
             match command {
                 PathCommand::Move => {
@@ -104,6 +116,42 @@ impl Path {
                         path.line_to(Vec2::lerp(t, p012, p123));
                     }
                     i += 3;
+                }
+                PathCommand::Conic => {
+                    let last = *path.points.last().unwrap_or(&Vec2::new(0.0, 0.0));
+                    let control = transform * self.points[i];
+                    let point = transform * self.points[i + 1];
+                    let weight = self.weights[weight_i];
+
+                    fn flatten_conic(
+                        last: Vec2,
+                        control: Vec2,
+                        point: Vec2,
+                        weight: f32,
+                        t0: f32,
+                        t1: f32,
+                        p0: Vec2,
+                        p1: Vec2,
+                        path: &mut Path,
+                    ) {
+                        let t = 0.5 * (t0 + t1);
+                        let p01 = Vec2::lerp(t, last, weight * control);
+                        let p12 = Vec2::lerp(t, weight * control, point);
+                        let denom = (1.0 - t) * (1.0 - t) + 2.0 * t * (1.0 - t) * weight + t * t;
+                        let midpoint = (1.0 / denom) * Vec2::lerp(t, p01, p12);
+                        let err = (midpoint - 0.5 * (p0 + p1)).length();
+                        if err > TOLERANCE {
+                            flatten_conic(last, control, point, weight, t0, t, p0, midpoint, path);
+                            flatten_conic(last, control, point, weight, t, t1, midpoint, p1, path);
+                        } else {
+                            path.line_to(midpoint);
+                            path.line_to(p1);
+                        }
+                    };
+                    flatten_conic(last, control, point, weight, 0.0, 1.0, last, point, &mut path);
+
+                    i += 2;
+                    weight_i += 1;
                 }
                 PathCommand::Close => {
                     path.close();
