@@ -28,6 +28,35 @@ impl Path {
         }
     }
 
+    pub fn rect(x: f32, y: f32, width: f32, height: f32) -> Path {
+        let mut path = Path::new();
+        path.move_to(Vec2::new(x, y));
+        path.line_to(Vec2::new(x, y + height));
+        path.line_to(Vec2::new(x + width, y + height));
+        path.line_to(Vec2::new(x + width, y));
+        path.line_to(Vec2::new(x, y));
+        path.close();
+        path
+    }
+
+    pub fn round_rect(x: f32, y: f32, width: f32, height: f32, radius: f32) -> Path {
+        let radius = radius.min(0.5 * width).min(0.5 * height);
+        let weight = 0.5 * 2.0f32.sqrt();
+
+        let mut path = Path::new();
+        path.move_to(Vec2::new(x + radius, y));
+        path.conic_to(Vec2::new(x, y), Vec2::new(x, y + radius), weight);
+        path.line_to(Vec2::new(x, y + height - radius));
+        path.conic_to(Vec2::new(x, y + height), Vec2::new(x + radius, y + height), weight);
+        path.line_to(Vec2::new(x + width - radius, y + height));
+        path.conic_to(Vec2::new(x + width, y + height), Vec2::new(x + width, y + height - radius), weight);
+        path.line_to(Vec2::new(x + width, y + radius));
+        path.conic_to(Vec2::new(x + width, y), Vec2::new(x + width - radius, y), weight);
+        path.line_to(Vec2::new(x + radius, y));
+        path.close();
+        path
+    }
+
     pub fn move_to(&mut self, point: Vec2) -> &mut Self {
         self.commands.push(PathCommand::Move);
         self.points.push(point);
