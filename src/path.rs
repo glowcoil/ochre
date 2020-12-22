@@ -74,18 +74,14 @@ impl Path {
                     let last = *path.points.last().unwrap_or(&Vec2::new(0.0, 0.0));
                     let control = transform * self.points[i];
                     let point = transform * self.points[i + 1];
-                    let a_x = last.x - 2.0 * control.x + point.x;
-                    let a_y = last.y - 2.0 * control.y + point.y;
-                    let n = ((a_x * a_x + a_y * a_y) / (8.0 * TOLERANCE * TOLERANCE)).sqrt().sqrt() as usize;
-                    let dt = 1.0 / n as f32;
+                    let dt = ((4.0 * TOLERANCE) / (last - 2.0 * control + point).length()).sqrt();
                     let mut t = 0.0;
-                    for _ in 0..n.saturating_sub(1) {
-                        t += dt;
+                    while t < 1.0 {
+                        t = (t + dt).min(1.0);
                         let p01 = Vec2::lerp(t, last, control);
                         let p12 = Vec2::lerp(t, control, point);
                         path.line_to(Vec2::lerp(t, p01, p12));
                     }
-                    path.line_to(point);
                     i += 2;
                 }
                 PathCommand::Cubic => {
@@ -93,16 +89,13 @@ impl Path {
                     let control1 = transform * self.points[i];
                     let control2 = transform * self.points[i + 1];
                     let point = transform * self.points[i + 2];
-                    let a_x = -last.x + 3.0 * control1.x - 3.0 * control2.x + point.x;
-                    let b_x = 3.0 * (last.x - 2.0 * control1.x + control2.x);
-                    let a_y = -last.y + 3.0 * control1.y - 3.0 * control2.y + point.y;
-                    let b_y = 3.0 * (last.y - 2.0 * control1.y + control2.y);
-                    let conc = (b_x * b_x + b_y * b_y).max((a_x + b_x) * (a_x + b_x) + (a_y + b_y) * (a_y + b_y));
-                    let n = (conc / (8.0 * TOLERANCE * TOLERANCE)).sqrt().sqrt() as usize;
-                    let dt = 1.0 / n as f32;
+                    let a = -1.0 * last + 3.0 * control1 - 3.0 * control2 + point;
+                    let b = 3.0 * (last - 2.0 * control1 + control2);
+                    let conc = b.length().max((a + b).length());
+                    let dt = ((8.0f32.sqrt() * TOLERANCE) / conc).sqrt();
                     let mut t = 0.0;
-                    for _ in 0..n.saturating_sub(1) {
-                        t += dt;
+                    while t < 1.0 {
+                        t = (t + dt).min(1.0);
                         let p01 = Vec2::lerp(t, last, control1);
                         let p12 = Vec2::lerp(t, control1, control2);
                         let p23 = Vec2::lerp(t, control2, point);
@@ -110,7 +103,6 @@ impl Path {
                         let p123 = Vec2::lerp(t, p12, p23);
                         path.line_to(Vec2::lerp(t, p012, p123));
                     }
-                    path.line_to(point);
                     i += 3;
                 }
                 PathCommand::Close => {
