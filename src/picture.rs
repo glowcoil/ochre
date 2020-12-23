@@ -72,7 +72,7 @@ impl Picture {
         let mut last = transform.offset;
         let mut tile_y_prev = 0;
         let mut commands = flattened.commands.iter();
-        let mut points = flattened.points.iter();
+        let mut i = 0;
         loop {
             let command = commands.next();
 
@@ -81,18 +81,20 @@ impl Picture {
             if let Some(command) = command {
                 match command {
                     PathCommand::Move => {
-                        let point = *points.next().unwrap();
+                        let point = Vec2::new(flattened.data[i], flattened.data[i + 1]);
                         p1 = last;
                         p2 = first;
                         first = point;
                         last = point;
                         tile_y_prev = (point.y as u16 / TILE_SIZE as u16) as i16;
+                        i += 2;
                     }
                     PathCommand::Line => {
-                        let point = *points.next().unwrap();
+                        let point = Vec2::new(flattened.data[i], flattened.data[i + 1]);
                         p1 = last;
                         p2 = point;
                         last = point;
+                        i += 2;
                     }
                     _ => {
                         continue;

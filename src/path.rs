@@ -5,8 +5,7 @@ const TOLERANCE: f32 = 0.1;
 #[derive(Clone)]
 pub struct Path {
     pub(crate) commands: Vec<PathCommand>,
-    pub(crate) points: Vec<Vec2>,
-    pub(crate) weights: Vec<f32>,
+    pub(crate) data: Vec<f32>,
 }
 
 #[derive(Copy, Clone)]
@@ -23,18 +22,17 @@ impl Path {
     pub fn new() -> Path {
         Path {
             commands: Vec::new(),
-            points: Vec::new(),
-            weights: Vec::new(),
+            data: Vec::new(),
         }
     }
 
     pub fn rect(x: f32, y: f32, width: f32, height: f32) -> Path {
         let mut path = Path::new();
-        path.move_to(Vec2::new(x, y));
-        path.line_to(Vec2::new(x, y + height));
-        path.line_to(Vec2::new(x + width, y + height));
-        path.line_to(Vec2::new(x + width, y));
-        path.line_to(Vec2::new(x, y));
+        path.move_to(x, y);
+        path.line_to(x, y + height);
+        path.line_to(x + width, y + height);
+        path.line_to(x + width, y);
+        path.line_to(x, y);
         path.close();
         path
     }
@@ -44,51 +42,46 @@ impl Path {
         let weight = 0.5 * 2.0f32.sqrt();
 
         let mut path = Path::new();
-        path.move_to(Vec2::new(x + radius, y));
-        path.conic_to(Vec2::new(x, y), Vec2::new(x, y + radius), weight);
-        path.line_to(Vec2::new(x, y + height - radius));
-        path.conic_to(Vec2::new(x, y + height), Vec2::new(x + radius, y + height), weight);
-        path.line_to(Vec2::new(x + width - radius, y + height));
-        path.conic_to(Vec2::new(x + width, y + height), Vec2::new(x + width, y + height - radius), weight);
-        path.line_to(Vec2::new(x + width, y + radius));
-        path.conic_to(Vec2::new(x + width, y), Vec2::new(x + width - radius, y), weight);
-        path.line_to(Vec2::new(x + radius, y));
+        path.move_to(x + radius, y);
+        path.conic_to(x, y, x, y + radius, weight);
+        path.line_to(x, y + height - radius);
+        path.conic_to(x, y + height, x + radius, y + height, weight);
+        path.line_to(x + width - radius, y + height);
+        path.conic_to(x + width, y + height, x + width, y + height - radius, weight);
+        path.line_to(x + width, y + radius);
+        path.conic_to(x + width, y, x + width - radius, y, weight);
+        path.line_to(x + radius, y);
         path.close();
         path
     }
 
-    pub fn move_to(&mut self, point: Vec2) -> &mut Self {
+    pub fn move_to(&mut self, x: f32, y: f32) -> &mut Self {
         self.commands.push(PathCommand::Move);
-        self.points.push(point);
+        self.data.extend_from_slice(&[x, y]);
         self
     }
 
-    pub fn line_to(&mut self, point: Vec2) -> &mut Self {
+    pub fn line_to(&mut self, x: f32, y: f32) -> &mut Self {
         self.commands.push(PathCommand::Line);
-        self.points.push(point);
+        self.data.extend_from_slice(&[x, y]);
         self
     }
 
-    pub fn quadratic_to(&mut self, control: Vec2, point: Vec2) -> &mut Self {
+    pub fn quadratic_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) -> &mut Self {
         self.commands.push(PathCommand::Quadratic);
-        self.points.push(control);
-        self.points.push(point);
+        self.data.extend_from_slice(&[x1, y1, x, y]);
         self
     }
 
-    pub fn cubic_to(&mut self, control1: Vec2, control2: Vec2, point: Vec2) -> &mut Self {
+    pub fn cubic_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) -> &mut Self {
         self.commands.push(PathCommand::Cubic);
-        self.points.push(control1);
-        self.points.push(control2);
-        self.points.push(point);
+        self.data.extend_from_slice(&[x1, y1, x2, y2, x, y]);
         self
     }
 
-    pub fn conic_to(&mut self, control: Vec2, point: Vec2, weight: f32) -> &mut Self {
+    pub fn conic_to(&mut self, x1: f32, y1: f32, x: f32, y: f32, weight: f32) -> &mut Self {
         self.commands.push(PathCommand::Conic);
-        self.points.push(control);
-        self.points.push(point);
-        self.weights.push(weight);
+        self.data.extend_from_slice(&[x1, y1, x, y, weight]);
         self
     }
 
@@ -100,36 +93,40 @@ impl Path {
     pub fn flatten(&self, transform: Transform) -> Path {
         let mut path = Path::new();
         let mut i = 0;
-        let mut weight_i = 0;
+        let mut last = Vec2::new(0.0, 0.0);
         for command in self.commands.iter() {
             match command {
                 PathCommand::Move => {
-                    path.move_to(transform.apply(self.points[i]));
-                    i += 1;
+                    let point = transform.apply(Vec2::new(self.data[i], self.data[i + 1]));
+                    path.move_to(point.x, point.y);
+                    last = point;
+                    i += 2;
                 }
                 PathCommand::Line => {
-                    path.line_to(transform.apply(self.points[i]));
-                    i += 1;
+                    let point = transform.apply(Vec2::new(self.data[i], self.data[i + 1]));
+                    path.line_to(point.x, point.y);
+                    last = point;
+                    i += 2;
                 }
                 PathCommand::Quadratic => {
-                    let last = *path.points.last().unwrap_or(&Vec2::new(0.0, 0.0));
-                    let control = transform.apply(self.points[i]);
-                    let point = transform.apply(self.points[i + 1]);
+                    let control = transform.apply(Vec2::new(self.data[i], self.data[i + 1]));
+                    let point = transform.apply(Vec2::new(self.data[i + 2], self.data[i + 3]));
                     let dt = ((4.0 * TOLERANCE) / (last - 2.0 * control + point).length()).sqrt();
                     let mut t = 0.0;
                     while t < 1.0 {
                         t = (t + dt).min(1.0);
                         let p01 = Vec2::lerp(t, last, control);
                         let p12 = Vec2::lerp(t, control, point);
-                        path.line_to(Vec2::lerp(t, p01, p12));
+                        let p = Vec2::lerp(t, p01, p12);
+                        path.line_to(p.x, p.y);
                     }
-                    i += 2;
+                    last = point;
+                    i += 4;
                 }
                 PathCommand::Cubic => {
-                    let last = *path.points.last().unwrap_or(&Vec2::new(0.0, 0.0));
-                    let control1 = transform.apply(self.points[i]);
-                    let control2 = transform.apply(self.points[i + 1]);
-                    let point = transform.apply(self.points[i + 2]);
+                    let control1 = transform.apply(Vec2::new(self.data[i], self.data[i + 1]));
+                    let control2 = transform.apply(Vec2::new(self.data[i + 2], self.data[i + 3]));
+                    let point = transform.apply(Vec2::new(self.data[i + 4], self.data[i + 5]));
                     let a = -1.0 * last + 3.0 * control1 - 3.0 * control2 + point;
                     let b = 3.0 * (last - 2.0 * control1 + control2);
                     let conc = b.length().max((a + b).length());
@@ -142,15 +139,16 @@ impl Path {
                         let p23 = Vec2::lerp(t, control2, point);
                         let p012 = Vec2::lerp(t, p01, p12);
                         let p123 = Vec2::lerp(t, p12, p23);
-                        path.line_to(Vec2::lerp(t, p012, p123));
+                        let p = Vec2::lerp(t, p012, p123);
+                        path.line_to(p.x, p.y);
                     }
-                    i += 3;
+                    last = point;
+                    i += 6;
                 }
                 PathCommand::Conic => {
-                    let last = *path.points.last().unwrap_or(&Vec2::new(0.0, 0.0));
-                    let control = transform.apply(self.points[i]);
-                    let point = transform.apply(self.points[i + 1]);
-                    let weight = self.weights[weight_i];
+                    let control = transform.apply(Vec2::new(self.data[i], self.data[i + 1]));
+                    let point = transform.apply(Vec2::new(self.data[i + 2], self.data[i + 3]));
+                    let weight = self.data[i + 4];
 
                     fn flatten_conic(
                         last: Vec2,
@@ -173,14 +171,14 @@ impl Path {
                             flatten_conic(last, control, point, weight, t0, t, p0, midpoint, path);
                             flatten_conic(last, control, point, weight, t, t1, midpoint, p1, path);
                         } else {
-                            path.line_to(midpoint);
-                            path.line_to(p1);
+                            path.line_to(midpoint.x, midpoint.y);
+                            path.line_to(p1.x, p1.y);
                         }
                     };
                     flatten_conic(last, control, point, weight, 0.0, 1.0, last, point, &mut path);
 
-                    i += 2;
-                    weight_i += 1;
+                    last = point;
+                    i += 5;
                 }
                 PathCommand::Close => {
                     path.close();
@@ -203,23 +201,21 @@ impl Path {
 
             if let None | Some(PathCommand::Move) = command {
                 if contour_start != contour_end {
-                    let contour = &self.points[contour_start..contour_end];
+                    let contour = &self.data[contour_start..contour_end];
 
-                    let base = path.points.len();
+                    let base = path.data.len();
 
                     let first_point = if closed {
-                        *contour.last().unwrap()
+                        Vec2::new(contour[contour.len() - 2], contour[contour.len() - 1])
                     } else {
-                        contour[0]
+                        Vec2::new(contour[0], contour[1])
                     };
                     let mut prev_point = first_point;
                     let mut prev_normal = Vec2::new(0.0, 0.0);
-                    let mut points = contour.into_iter();
+                    let mut i = 0;
                     loop {
-                        let point = points.next();
-
-                        let next_point = if let Some(&point) = point {
-                            point
+                        let next_point = if i + 2 <= contour.len() {
+                            Vec2::new(contour[i], contour[i + 1])
                         } else {
                             first_point
                         };
@@ -230,22 +226,27 @@ impl Path {
 
                             let offset = 1.0 / (1.0 + prev_normal.dot(next_normal));
                             if offset.abs() > 2.0 {
-                                path.points.push(prev_point + 0.5 * width * prev_normal);
-                                path.points.push(prev_point + 0.5 * width * next_normal);
+                                let point1 = prev_point + 0.5 * width * prev_normal;
+                                let point2 = prev_point + 0.5 * width * next_normal;
+                                path.data.extend_from_slice(&[point1.x, point1.y, point2.x, point2.y]);
                             } else {
-                                path.points.push(prev_point + 0.5 * width * offset * (prev_normal + next_normal));
+                                let point = prev_point + 0.5 * width * offset * (prev_normal + next_normal);
+                                path.data.extend_from_slice(&[point.x, point.y]);
                             }
 
                             prev_point = next_point;
                             prev_normal = next_normal;
                         }
 
-                        if point.is_none() { break; }
+                        i += 2;
+                        if i >= contour.len() {
+                            break;
+                        }
                     }
 
-                    if path.points.len() > base {
+                    if path.data.len() > base {
                         path.commands.push(PathCommand::Move);
-                        for _ in (base + 1)..path.points.len() {
+                        for _ in 0..((path.data.len() - base) / 2 - 1) {
                             path.commands.push(PathCommand::Line);
                         }
                         if closed {
@@ -253,21 +254,19 @@ impl Path {
                         }
                     }
 
-                    let base = path.points.len();
+                    let base = path.data.len();
 
                     let first_point = if closed {
-                        contour[0]
+                        Vec2::new(contour[0], contour[1])
                     } else {
-                        *contour.last().unwrap()
+                        Vec2::new(contour[contour.len() - 2], contour[contour.len() - 1])
                     };
                     let mut prev_point = first_point;
                     let mut prev_normal = Vec2::new(0.0, 0.0);
-                    let mut points = contour.into_iter().rev();
+                    let mut i = 0;
                     loop {
-                        let point = points.next();
-
-                        let next_point = if let Some(&point) = point {
-                            point
+                        let next_point = if i + 2 <= contour.len() {
+                            Vec2::new(contour[contour.len() - i - 2], contour[contour.len() - i - 1])
                         } else {
                             first_point
                         };
@@ -278,26 +277,31 @@ impl Path {
 
                             let offset = 1.0 / (1.0 + prev_normal.dot(next_normal));
                             if offset.abs() > 2.0 {
-                                path.points.push(prev_point + 0.5 * width * prev_normal);
-                                path.points.push(prev_point + 0.5 * width * next_normal);
+                                let point1 = prev_point + 0.5 * width * prev_normal;
+                                let point2 = prev_point + 0.5 * width * next_normal;
+                                path.data.extend_from_slice(&[point1.x, point1.y, point2.x, point2.y]);
                             } else {
-                                path.points.push(prev_point + 0.5 * width * offset * (prev_normal + next_normal));
+                                let point = prev_point + 0.5 * width * offset * (prev_normal + next_normal);
+                                path.data.extend_from_slice(&[point.x, point.y]);
                             }
 
                             prev_point = next_point;
                             prev_normal = next_normal;
                         }
 
-                        if point.is_none() { break; }
+                        i += 2;
+                        if i >= contour.len() {
+                            break;
+                        }
                     }
 
-                    if path.points.len() > base {
+                    if path.data.len() > base {
                         if closed {
                             path.commands.push(PathCommand::Move);
                         } else {
                             path.commands.push(PathCommand::Line);
                         }
-                        for _ in (base + 1)..path.points.len() {
+                        for _ in 0..((path.data.len() - base) / 2 - 1) {
                             path.commands.push(PathCommand::Line);
                         }
                         path.commands.push(PathCommand::Close);
@@ -309,10 +313,10 @@ impl Path {
                 match command {
                     PathCommand::Move => {
                         contour_start = contour_end;
-                        contour_end += 1;
+                        contour_end += 2;
                     }
                     PathCommand::Line => {
-                        contour_end += 1;
+                        contour_end += 2;
                     }
                     PathCommand::Close => {
                         closed = true;

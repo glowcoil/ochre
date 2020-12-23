@@ -1,4 +1,4 @@
-use ochre::{Path, Vec2, Transform, Picture, Color, GlBackend};
+use ochre::{Path, Transform, Picture, Color, GlBackend};
 
 fn main() {
     let mut events_loop = glutin::EventsLoop::new();
@@ -13,9 +13,9 @@ fn main() {
     gl::load_with(|symbol| context.get_proc_address(symbol) as *const _);
 
     let mut path = Path::new();
-    path.move_to(Vec2::new(400.0, 300.0))
-        .quadratic_to(Vec2::new(500.0, 200.0), Vec2::new(400.0, 100.0))
-        .cubic_to(Vec2::new(350.0, 150.0), Vec2::new(100.0, 250.0), Vec2::new(400.0, 300.0));
+    path.move_to(400.0, 300.0)
+        .quadratic_to(500.0, 200.0, 400.0, 100.0)
+        .cubic_to(350.0, 150.0, 100.0, 250.0, 400.0, 300.0);
 
     let mut picture = Picture::new();
     picture.fill(&path, Transform::id(), Color::rgba(1.0, 1.0, 1.0, 1.0));
