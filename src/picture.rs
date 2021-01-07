@@ -304,7 +304,7 @@ impl Picture {
     }
 
     pub fn stroke(&mut self, path: &Path, width: f32, transform: Transform, color: Color) {
-        self.fill(&path.flatten(Transform::id()).stroke(width), transform, color);
+        self.fill(&path.stroke(width), transform, color);
     }
 
     pub fn vertices(&self) -> &[Vertex] {

@@ -189,19 +189,21 @@ impl Path {
         path
     }
 
-    pub(crate) fn stroke(&self, width: f32) -> Path {
+    pub fn stroke(&self, width: f32) -> Path {
         let mut path = Path::new();
+
+        let flattened = self.flatten(Transform::id());
 
         let mut contour_start = 0;
         let mut contour_end = 0;
         let mut closed = false;
-        let mut commands = self.commands.iter();
+        let mut commands = flattened.commands.iter();
         loop {
             let command = commands.next();
 
             if let None | Some(PathCommand::Move) = command {
                 if contour_start != contour_end {
-                    let contour = &self.data[contour_start..contour_end];
+                    let contour = &flattened.data[contour_start..contour_end];
 
                     let base = path.data.len();
 
