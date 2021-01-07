@@ -1,7 +1,7 @@
 use std::ffi::{CStr, CString};
 use gl::types::{GLuint, GLint, GLchar, GLenum, GLvoid, GLsizei};
 
-use ochre::{Color, Path, Picture, Transform, Vertex};
+use ochre::{rasterize, Path, TileBuilder, Transform, TILE_SIZE};
 
 macro_rules! offset {
     ($type:ty, $field:ident) => { &(*(0 as *const $type)).$field as *const _ as usize }
@@ -9,6 +9,83 @@ macro_rules! offset {
 
 const SCREEN_WIDTH: u32 = 800;
 const SCREEN_HEIGHT: u32 = 600;
+
+const ATLAS_SIZE: usize = 2048;
+
+#[derive(Copy, Clone)]
+pub struct Vertex {
+    pub pos: [i16; 2],
+    pub uv: [u16; 2],
+    pub col: [u8; 4],
+}
+
+struct Builder {
+    vertices: Vec<Vertex>,
+    indices: Vec<u32>,
+    atlas: Vec<u8>,
+    next_row: u16,
+    next_col: u16,
+    color: [u8; 4],
+}
+
+impl Builder {
+    fn new() -> Builder {
+        let mut atlas = vec![0; ATLAS_SIZE * ATLAS_SIZE];
+        for row in 0..TILE_SIZE {
+            for col in 0..TILE_SIZE {
+                atlas[row * ATLAS_SIZE + col] = 255;
+            }
+        }
+
+        Builder {
+            vertices: Vec::new(),
+            indices: Vec::new(),
+            atlas,
+            next_row: 0,
+            next_col: 1,
+            color: [255; 4],
+        }
+    }
+}
+
+impl TileBuilder for Builder {
+    fn tile(&mut self, x: i16, y: i16, data: [u8; TILE_SIZE * TILE_SIZE]) {
+        let base = self.vertices.len() as u32;
+       
+        let u1 = self.next_col * TILE_SIZE as u16;
+        let u2 = (self.next_col + 1) * TILE_SIZE as u16;
+        let v1 = self.next_row * TILE_SIZE as u16;
+        let v2 = (self.next_row + 1) * TILE_SIZE as u16;
+          
+        self.vertices.push(Vertex { pos: [x, y], col: self.color, uv: [u1, v1] });
+        self.vertices.push(Vertex { pos: [x + TILE_SIZE as i16, y], col: self.color, uv: [u2, v1] });
+        self.vertices.push(Vertex { pos: [x + TILE_SIZE as i16, y + TILE_SIZE as i16], col: self.color, uv: [u2, v2] });
+        self.vertices.push(Vertex { pos: [x, y + TILE_SIZE as i16], col: self.color, uv: [u1, v2] });
+        self.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+
+        for row in 0..TILE_SIZE {
+            for col in 0..TILE_SIZE {
+                self.atlas[self.next_row as usize * TILE_SIZE * ATLAS_SIZE + row * ATLAS_SIZE + self.next_col as usize * TILE_SIZE + col] = data[row * TILE_SIZE + col];
+            }
+        }
+
+        self.next_col += 1;
+        if self.next_col as usize == ATLAS_SIZE / TILE_SIZE {
+            self.next_col = 0;
+            self.next_row += 1;
+        }
+    }
+
+    fn span(&mut self, x: i16, y: i16, width: u16) {
+        let base = self.vertices.len() as u32;
+
+        self.vertices.push(Vertex { pos: [x, y], col: self.color, uv: [0, 0] });
+        self.vertices.push(Vertex { pos: [x + (width as i16 * TILE_SIZE as i16), y], col: self.color, uv: [0, 0] });
+        self.vertices.push(Vertex { pos: [x + (width as i16 * TILE_SIZE as i16), y + TILE_SIZE as i16], col: self.color, uv: [0, 0] });
+        self.vertices.push(Vertex { pos: [x, y + TILE_SIZE as i16], col: self.color, uv: [0, 0] });
+        self.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+}
 
 fn main() {
     let mut events_loop = glutin::EventsLoop::new();
@@ -26,7 +103,8 @@ fn main() {
     let path = std::env::args().nth(1).expect("provide an svg file");
     let tree = usvg::Tree::from_file(path, &usvg::Options::default()).unwrap();
 
-    let mut picture = Picture::new();
+    let mut builder = Builder::new();
+
     for child in tree.root().children() {
         match *child.borrow() {
             usvg::NodeKind::Path(ref p) => {
@@ -60,29 +138,14 @@ fn main() {
                 }
                 if let Some(ref fill) = p.fill {
                     if let usvg::Paint::Color(color) = fill.paint {
-                        let color = Color::rgba(
-                            color.red as f32 / 255.0,
-                            color.green as f32 / 255.0,
-                            color.blue as f32 / 255.0,
-                            fill.opacity.value() as f32,
-                        );
-                        picture.fill(&path, Transform::translate(200.0, 200.0), color);
+                        builder.color = [color.red, color.green, color.blue, fill.opacity.to_u8()];
+                        rasterize(&path, Transform::translate(200.0, 200.0), &mut builder);
                     }
                 }
                 if let Some(ref stroke) = p.stroke {
                     if let usvg::Paint::Color(color) = stroke.paint {
-                        let color = Color::rgba(
-                            color.red as f32 / 255.0,
-                            color.green as f32 / 255.0,
-                            color.blue as f32 / 255.0,
-                            stroke.opacity.value() as f32,
-                        );
-                        picture.stroke(
-                            &path,
-                            1.0 * stroke.width.value() as f32,
-                            Transform::translate(200.0, 200.0),
-                            color,
-                        );
+                        builder.color = [color.red, color.green, color.blue, stroke.opacity.to_u8()];
+                        rasterize(&path.stroke(stroke.width.value() as f32), Transform::translate(200.0, 200.0), &mut builder);
                     }
                 }
             }
@@ -99,9 +162,6 @@ fn main() {
         gl::Enable(gl::BLEND);
     }
 
-    let (tex_width, tex_height) = picture.tiles_size();
-    let tiles = picture.tiles();
-
     let mut tex: GLuint = 0;
     unsafe {
         gl::GenTextures(1, &mut tex);
@@ -109,11 +169,8 @@ fn main() {
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
         gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
-        gl::TexImage2D(gl::TEXTURE_2D, 0, gl::R8 as GLint, tex_width as GLsizei, tex_height as GLsizei, 0, gl::RED, gl::UNSIGNED_BYTE, tiles.as_ptr() as *const std::ffi::c_void);
+        gl::TexImage2D(gl::TEXTURE_2D, 0, gl::R8 as GLint, ATLAS_SIZE as GLsizei, ATLAS_SIZE as GLsizei, 0, gl::RED, gl::UNSIGNED_BYTE, builder.atlas.as_ptr() as *const std::ffi::c_void);
     }
-
-    let vertices = picture.vertices();
-    let indices = picture.indices();
 
     let mut vbo: GLuint = 0;
     let mut ibo: GLuint = 0;
@@ -124,11 +181,11 @@ fn main() {
 
         gl::GenBuffers(1, &mut vbo);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-        gl::BufferData(gl::ARRAY_BUFFER, (vertices.len() * std::mem::size_of::<Vertex>()) as isize, vertices.as_ptr() as *const std::ffi::c_void, gl::STREAM_DRAW);
+        gl::BufferData(gl::ARRAY_BUFFER, (builder.vertices.len() * std::mem::size_of::<Vertex>()) as isize, builder.vertices.as_ptr() as *const std::ffi::c_void, gl::STREAM_DRAW);
 
         gl::GenBuffers(1, &mut ibo);
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ibo);
-        gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, (indices.len() * std::mem::size_of::<u32>()) as isize, indices.as_ptr() as *const std::ffi::c_void, gl::STREAM_DRAW);
+        gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, (builder.indices.len() * std::mem::size_of::<u32>()) as isize, builder.indices.as_ptr() as *const std::ffi::c_void, gl::STREAM_DRAW);
 
         let pos = gl::GetAttribLocation(prog.id, b"pos\0" as *const u8 as *const i8) as GLuint;
         gl::EnableVertexAttribArray(pos);
@@ -148,7 +205,7 @@ fn main() {
         gl::Uniform2ui(res, SCREEN_WIDTH, SCREEN_HEIGHT);
 
         let atlas_size = gl::GetUniformLocation(prog.id, b"atlas_size\0" as *const u8 as *const i8);
-        gl::Uniform2ui(atlas_size, tex_width, tex_height);
+        gl::Uniform2ui(atlas_size, ATLAS_SIZE as u32, ATLAS_SIZE as u32);
 
         gl::ActiveTexture(gl::TEXTURE0);
         gl::BindTexture(gl::TEXTURE_2D, tex);
@@ -161,7 +218,7 @@ fn main() {
         unsafe {
             gl::ClearColor(1.0, 1.0, 1.0, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
-            gl::DrawElements(gl::TRIANGLES, indices.len() as GLint, gl::UNSIGNED_INT, 0 as *const std::ffi::c_void);
+            gl::DrawElements(gl::TRIANGLES, builder.indices.len() as GLint, gl::UNSIGNED_INT, 0 as *const std::ffi::c_void);
         }
 
         context.swap_buffers().unwrap();

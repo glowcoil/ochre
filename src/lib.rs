@@ -1,7 +1,7 @@
 mod geom;
 mod path;
-mod picture;
+mod rasterize;
 
 pub use geom::*;
 pub use path::*;
-pub use picture::*;
+pub use rasterize::*;
