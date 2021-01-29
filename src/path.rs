@@ -190,6 +190,63 @@ impl Path {
     }
 
     pub fn stroke(&self, width: f32) -> Path {
+        #[inline]
+        fn join(path: &mut Path, width: f32, prev_normal: Vec2, next_normal: Vec2, point: Vec2) {
+            let offset = 1.0 / (1.0 + prev_normal.dot(next_normal));
+            if offset.abs() > 2.0 {
+                let point1 = point + 0.5 * width * prev_normal;
+                let point2 = point + 0.5 * width * next_normal;
+                path.data.extend_from_slice(&[point1.x, point1.y, point2.x, point2.y]);
+            } else {
+                let point = point + 0.5 * width * offset * (prev_normal + next_normal);
+                path.data.extend_from_slice(&[point.x, point.y]);
+            }
+        }
+
+        #[inline]
+        fn offset(path: &mut Path, width: f32, contour: &[f32], closed: bool, reverse: bool) {
+            let first_point = if closed == reverse {
+                Vec2::new(contour[0], contour[1])
+            } else {
+                Vec2::new(contour[contour.len() - 2], contour[contour.len() - 1])
+            };
+            let mut prev_point = first_point;
+            let mut prev_normal = Vec2::new(0.0, 0.0);
+            let mut i = 0;
+            loop {
+                let next_point = if i + 2 <= contour.len() {
+                    if reverse {
+                        Vec2::new(contour[contour.len() - i - 2], contour[contour.len() - i - 1])
+                    } else {
+                        Vec2::new(contour[i], contour[i + 1])
+                    }
+                } else {
+                    first_point
+                };
+
+                if next_point != prev_point || i == contour.len() {
+                    let next_tangent = next_point - prev_point;
+                    let next_normal = Vec2::new(-next_tangent.y, next_tangent.x);
+                    let next_normal_len = next_normal.length();
+                    let next_normal = if next_normal_len == 0.0 {
+                        Vec2::new(0.0, 0.0)
+                    } else {
+                        next_normal * (1.0 / next_normal_len)
+                    };
+
+                    join(path, width, prev_normal, next_normal, prev_point);
+
+                    prev_point = next_point;
+                    prev_normal = next_normal;
+                }
+
+                i += 2;
+                if i > contour.len() {
+                    break;
+                }
+            }
+        }
+
         let mut path = Path::new();
 
         let flattened = self.flatten(Transform::id());
@@ -207,50 +264,7 @@ impl Path {
 
                     let base = path.data.len();
 
-                    let first_point = if closed {
-                        Vec2::new(contour[contour.len() - 2], contour[contour.len() - 1])
-                    } else {
-                        Vec2::new(contour[0], contour[1])
-                    };
-                    let mut prev_point = first_point;
-                    let mut prev_normal = Vec2::new(0.0, 0.0);
-                    let mut i = 0;
-                    loop {
-                        let next_point = if i + 2 <= contour.len() {
-                            Vec2::new(contour[i], contour[i + 1])
-                        } else {
-                            first_point
-                        };
-
-                        if next_point != prev_point || i == contour.len() {
-                            let next_tangent = next_point - prev_point;
-                            let next_normal = Vec2::new(-next_tangent.y, next_tangent.x);
-                            let next_normal_len = next_normal.length();
-                            let next_normal = if next_normal_len == 0.0 {
-                                Vec2::new(0.0, 0.0)
-                            } else {
-                                next_normal * (1.0 / next_normal_len)
-                            };
-
-                            let offset = 1.0 / (1.0 + prev_normal.dot(next_normal));
-                            if offset.abs() > 2.0 {
-                                let point1 = prev_point + 0.5 * width * prev_normal;
-                                let point2 = prev_point + 0.5 * width * next_normal;
-                                path.data.extend_from_slice(&[point1.x, point1.y, point2.x, point2.y]);
-                            } else {
-                                let point = prev_point + 0.5 * width * offset * (prev_normal + next_normal);
-                                path.data.extend_from_slice(&[point.x, point.y]);
-                            }
-
-                            prev_point = next_point;
-                            prev_normal = next_normal;
-                        }
-
-                        i += 2;
-                        if i > contour.len() {
-                            break;
-                        }
-                    }
+                    offset(&mut path, width, contour, closed, false);
 
                     if path.data.len() > base {
                         path.commands.push(PathCommand::Move);
@@ -264,50 +278,7 @@ impl Path {
 
                     let base = path.data.len();
 
-                    let first_point = if closed {
-                        Vec2::new(contour[0], contour[1])
-                    } else {
-                        Vec2::new(contour[contour.len() - 2], contour[contour.len() - 1])
-                    };
-                    let mut prev_point = first_point;
-                    let mut prev_normal = Vec2::new(0.0, 0.0);
-                    let mut i = 0;
-                    loop {
-                        let next_point = if i + 2 <= contour.len() {
-                            Vec2::new(contour[contour.len() - i - 2], contour[contour.len() - i - 1])
-                        } else {
-                            first_point
-                        };
-
-                        if next_point != prev_point || i == contour.len() {
-                            let next_tangent = next_point - prev_point;
-                            let next_normal = Vec2::new(-next_tangent.y, next_tangent.x);
-                            let next_normal_len = next_normal.length();
-                            let next_normal = if next_normal_len == 0.0 {
-                                Vec2::new(0.0, 0.0)
-                            } else {
-                                next_normal * (1.0 / next_normal_len)
-                            };
-
-                            let offset = 1.0 / (1.0 + prev_normal.dot(next_normal));
-                            if offset.abs() > 2.0 {
-                                let point1 = prev_point + 0.5 * width * prev_normal;
-                                let point2 = prev_point + 0.5 * width * next_normal;
-                                path.data.extend_from_slice(&[point1.x, point1.y, point2.x, point2.y]);
-                            } else {
-                                let point = prev_point + 0.5 * width * offset * (prev_normal + next_normal);
-                                path.data.extend_from_slice(&[point.x, point.y]);
-                            }
-
-                            prev_point = next_point;
-                            prev_normal = next_normal;
-                        }
-
-                        i += 2;
-                        if i > contour.len() {
-                            break;
-                        }
-                    }
+                    offset(&mut path, width, contour, closed, true);
 
                     if path.data.len() > base {
                         if closed {
