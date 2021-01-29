@@ -222,9 +222,15 @@ impl Path {
                             first_point
                         };
 
-                        if next_point != prev_point {
+                        if next_point != prev_point || i == contour.len() {
                             let next_tangent = next_point - prev_point;
-                            let next_normal = Vec2::new(-next_tangent.y, next_tangent.x).normalized();
+                            let next_normal = Vec2::new(-next_tangent.y, next_tangent.x);
+                            let next_normal_len = next_normal.length();
+                            let next_normal = if next_normal_len == 0.0 {
+                                Vec2::new(0.0, 0.0)
+                            } else {
+                                next_normal * (1.0 / next_normal_len)
+                            };
 
                             let offset = 1.0 / (1.0 + prev_normal.dot(next_normal));
                             if offset.abs() > 2.0 {
@@ -241,7 +247,7 @@ impl Path {
                         }
 
                         i += 2;
-                        if i >= contour.len() {
+                        if i > contour.len() {
                             break;
                         }
                     }
@@ -273,9 +279,15 @@ impl Path {
                             first_point
                         };
 
-                        if next_point != prev_point {
+                        if next_point != prev_point || i == contour.len() {
                             let next_tangent = next_point - prev_point;
-                            let next_normal = Vec2::new(-next_tangent.y, next_tangent.x).normalized();
+                            let next_normal = Vec2::new(-next_tangent.y, next_tangent.x);
+                            let next_normal_len = next_normal.length();
+                            let next_normal = if next_normal_len == 0.0 {
+                                Vec2::new(0.0, 0.0)
+                            } else {
+                                next_normal * (1.0 / next_normal_len)
+                            };
 
                             let offset = 1.0 / (1.0 + prev_normal.dot(next_normal));
                             if offset.abs() > 2.0 {
@@ -292,7 +304,7 @@ impl Path {
                         }
 
                         i += 2;
-                        if i >= contour.len() {
+                        if i > contour.len() {
                             break;
                         }
                     }
