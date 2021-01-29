@@ -29,7 +29,7 @@ pub fn rasterize<B: TileBuilder>(path: &Path, transform: Transform, builder: &mu
     let mut tile_increments = Vec::new();
     let mut first = transform.offset;
     let mut last = transform.offset;
-    let mut tile_y_prev = (first.y as u16 / TILE_SIZE as u16) as i16;
+    let mut tile_y_prev = (first.y as i16).wrapping_div_euclid(TILE_SIZE as i16);
     let mut commands = flattened.commands.iter();
     let mut i = 0;
     loop {
@@ -68,8 +68,8 @@ pub fn rasterize<B: TileBuilder>(path: &Path, transform: Transform, builder: &mu
             let y_dir = (p2.y - p1.y).signum() as i16;
             let dtdx = 1.0 / (p2.x - p1.x);
             let dtdy = 1.0 / (p2.y - p1.y);
-            let mut x = p1.x as u16 as i16;
-            let mut y = p1.y as u16 as i16;
+            let mut x = p1.x.floor() as i16;
+            let mut y = p1.y.floor() as i16;
             let mut row_t0: f32 = 0.0;
             let mut col_t0: f32 = 0.0;
             let mut row_t1 = if p1.y == p2.y {
@@ -98,10 +98,10 @@ pub fn rasterize<B: TileBuilder>(path: &Path, transform: Transform, builder: &mu
 
                 increments.push(Increment { x, y, area, height });
 
-                let tile_y = (y as u16 / TILE_SIZE as u16) as i16;
+                let tile_y = y.wrapping_div_euclid(TILE_SIZE as i16);
                 if tile_y != tile_y_prev {
                     tile_increments.push(TileIncrement {
-                        tile_x: (x as u16 / TILE_SIZE as u16) as i16,
+                        tile_x: x.wrapping_div_euclid(TILE_SIZE as i16),
                         tile_y: tile_y_prev.min(tile_y),
                         sign: (tile_y - tile_y_prev) as i8,
                     });
@@ -129,7 +129,7 @@ pub fn rasterize<B: TileBuilder>(path: &Path, transform: Transform, builder: &mu
         }
 
         if let Some(PathCommand::Move) = command {
-            tile_y_prev = (first.y as u16 / TILE_SIZE as u16) as i16;
+            tile_y_prev = (first.y as i16).wrapping_div_euclid(TILE_SIZE as i16);
         }
 
         if command.is_none() { break; }
@@ -145,12 +145,12 @@ pub fn rasterize<B: TileBuilder>(path: &Path, transform: Transform, builder: &mu
     let mut bins = Vec::new();
     let mut bin = Bin { tile_x: 0, tile_y: 0, start: 0, end: 0 };
     if let Some(first) = increments.first() {
-        bin.tile_x = ((first.x as u16) / TILE_SIZE as u16) as i16;
-        bin.tile_y = ((first.y as u16) / TILE_SIZE as u16) as i16;
+        bin.tile_x = (first.x as i16).wrapping_div_euclid(TILE_SIZE as i16);
+        bin.tile_y = (first.y as i16).wrapping_div_euclid(TILE_SIZE as i16);
     }
     for (i, increment) in increments.iter().enumerate() {
-        let tile_x = ((increment.x as u16) / TILE_SIZE as u16) as i16;
-        let tile_y = ((increment.y as u16) / TILE_SIZE as u16) as i16;
+        let tile_x = increment.x.wrapping_div_euclid(TILE_SIZE as i16);
+        let tile_y = increment.y.wrapping_div_euclid(TILE_SIZE as i16);
         if tile_x != bin.tile_x || tile_y != bin.tile_y {
             bins.push(bin);
             bin = Bin { tile_x, tile_y, start: i, end: i };
@@ -173,8 +173,8 @@ pub fn rasterize<B: TileBuilder>(path: &Path, transform: Transform, builder: &mu
     for i in 0..bins.len() {
         let bin = bins[i];
         for increment in &increments[bin.start..bin.end] {
-            let x = increment.x as usize % TILE_SIZE;
-            let y = increment.y as usize % TILE_SIZE;
+            let x = (increment.x as usize).wrapping_rem_euclid(TILE_SIZE);
+            let y = (increment.y as usize).wrapping_rem_euclid(TILE_SIZE);
             areas[(y * TILE_SIZE + x) as usize] += increment.area;
             heights[(y * TILE_SIZE + x) as usize] += increment.height;
         }
