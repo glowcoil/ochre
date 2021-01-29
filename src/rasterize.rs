@@ -29,7 +29,7 @@ pub fn rasterize<B: TileBuilder>(path: &Path, transform: Transform, builder: &mu
     let mut tile_increments = Vec::new();
     let mut first = transform.offset;
     let mut last = transform.offset;
-    let mut tile_y_prev = (first.y as i16).wrapping_div_euclid(TILE_SIZE as i16);
+    let mut tile_y_prev = (first.y.floor() as i16).wrapping_div_euclid(TILE_SIZE as i16);
     let mut commands = flattened.commands.iter();
     let mut i = 0;
     loop {
@@ -129,7 +129,7 @@ pub fn rasterize<B: TileBuilder>(path: &Path, transform: Transform, builder: &mu
         }
 
         if let Some(PathCommand::Move) = command {
-            tile_y_prev = (first.y as i16).wrapping_div_euclid(TILE_SIZE as i16);
+            tile_y_prev = (first.y.floor() as i16).wrapping_div_euclid(TILE_SIZE as i16);
         }
 
         if command.is_none() { break; }
