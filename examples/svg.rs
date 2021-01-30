@@ -10,7 +10,7 @@ macro_rules! offset {
 const SCREEN_WIDTH: u32 = 800;
 const SCREEN_HEIGHT: u32 = 600;
 
-const ATLAS_SIZE: usize = 2048;
+const ATLAS_SIZE: usize = 4096;
 
 #[derive(Copy, Clone)]
 pub struct Vertex {
