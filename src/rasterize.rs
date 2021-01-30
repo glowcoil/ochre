@@ -213,7 +213,7 @@ pub fn rasterize<B: TileBuilder>(path: &Path, transform: Transform, builder: &mu
                 }
                 if winding != 0 {
                     let width = bins[i + 1].tile_x - bin.tile_x - 1;
-                    builder.span((bin.tile_x + 1) * TILE_SIZE as i16, bin.tile_y * TILE_SIZE as i16, width as u16);
+                    builder.span((bin.tile_x + 1) * TILE_SIZE as i16, bin.tile_y * TILE_SIZE as i16, width as u16 * TILE_SIZE as u16);
                 }
             }
         }

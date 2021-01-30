@@ -80,8 +80,8 @@ impl TileBuilder for Builder {
         let base = self.vertices.len() as u32;
 
         self.vertices.push(Vertex { pos: [x, y], col: self.color, uv: [0, 0] });
-        self.vertices.push(Vertex { pos: [x + (width as i16 * TILE_SIZE as i16), y], col: self.color, uv: [0, 0] });
-        self.vertices.push(Vertex { pos: [x + (width as i16 * TILE_SIZE as i16), y + TILE_SIZE as i16], col: self.color, uv: [0, 0] });
+        self.vertices.push(Vertex { pos: [x + (width as i16), y], col: self.color, uv: [0, 0] });
+        self.vertices.push(Vertex { pos: [x + (width as i16), y + TILE_SIZE as i16], col: self.color, uv: [0, 0] });
         self.vertices.push(Vertex { pos: [x, y + TILE_SIZE as i16], col: self.color, uv: [0, 0] });
         self.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
