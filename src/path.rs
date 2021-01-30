@@ -90,6 +90,12 @@ impl Path {
         self
     }
 
+    pub fn push(&mut self, path: &Path) -> &mut Self {
+        self.commands.extend_from_slice(&path.commands);
+        self.data.extend_from_slice(&path.data);
+        self
+    }
+
     pub fn flatten(&self, transform: Transform) -> Path {
         let mut path = Path::new();
         let mut i = 0;
