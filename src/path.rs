@@ -26,35 +26,6 @@ impl Path {
         }
     }
 
-    pub fn rect(x: f32, y: f32, width: f32, height: f32) -> Path {
-        let mut path = Path::new();
-        path.move_to(x, y);
-        path.line_to(x, y + height);
-        path.line_to(x + width, y + height);
-        path.line_to(x + width, y);
-        path.line_to(x, y);
-        path.close();
-        path
-    }
-
-    pub fn round_rect(x: f32, y: f32, width: f32, height: f32, radius: f32) -> Path {
-        let radius = radius.min(0.5 * width).min(0.5 * height);
-        let weight = 0.5 * 2.0f32.sqrt();
-
-        let mut path = Path::new();
-        path.move_to(x + radius, y);
-        path.conic_to(x, y, x, y + radius, weight);
-        path.line_to(x, y + height - radius);
-        path.conic_to(x, y + height, x + radius, y + height, weight);
-        path.line_to(x + width - radius, y + height);
-        path.conic_to(x + width, y + height, x + width, y + height - radius, weight);
-        path.line_to(x + width, y + radius);
-        path.conic_to(x + width, y, x + width - radius, y, weight);
-        path.line_to(x + radius, y);
-        path.close();
-        path
-    }
-
     pub fn move_to(&mut self, x: f32, y: f32) -> &mut Self {
         self.commands.push(PathCommand::Move);
         self.data.extend_from_slice(&[x, y]);
@@ -93,6 +64,33 @@ impl Path {
     pub fn push(&mut self, path: &Path) -> &mut Self {
         self.commands.extend_from_slice(&path.commands);
         self.data.extend_from_slice(&path.data);
+        self
+    }
+
+    pub fn rect(&mut self, x: f32, y: f32, width: f32, height: f32) -> &mut Self {
+        self.move_to(x, y);
+        self.line_to(x, y + height);
+        self.line_to(x + width, y + height);
+        self.line_to(x + width, y);
+        self.line_to(x, y);
+        self.close();
+        self
+    }
+
+    pub fn round_rect(&mut self, x: f32, y: f32, width: f32, height: f32, radius: f32) -> &mut Self {
+        let radius = radius.min(0.5 * width).min(0.5 * height);
+        let weight = 0.5 * 2.0f32.sqrt();
+
+        self.move_to(x + radius, y);
+        self.conic_to(x, y, x, y + radius, weight);
+        self.line_to(x, y + height - radius);
+        self.conic_to(x, y + height, x + radius, y + height, weight);
+        self.line_to(x + width - radius, y + height);
+        self.conic_to(x + width, y + height, x + width, y + height - radius, weight);
+        self.line_to(x + width, y + radius);
+        self.conic_to(x + width, y, x + width - radius, y, weight);
+        self.line_to(x + radius, y);
+        self.close();
         self
     }
 
