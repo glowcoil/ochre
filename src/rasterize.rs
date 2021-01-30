@@ -98,6 +98,21 @@ pub fn rasterize<B: TileBuilder>(path: &Path, transform: Transform, builder: &mu
 
                 increments.push(Increment { x, y, area, height });
 
+                if row_t1 < col_t1 {
+                    row_t0 = row_t1;
+                    row_t1 = (row_t1 + y_step).min(1.0);
+                    y += y_dir;
+                } else {
+                    col_t0 = col_t1;
+                    col_t1 = (col_t1 + x_step).min(1.0);
+                    x += x_dir;
+                }
+
+                if row_t0 == 1.0 || col_t0 == 1.0 {
+                    x = p2.x.floor() as i16;
+                    y = p2.y.floor() as i16;
+                }
+
                 let tile_y = y.wrapping_div_euclid(TILE_SIZE as i16);
                 if tile_y != tile_y_prev {
                     tile_increments.push(TileIncrement {
@@ -108,22 +123,8 @@ pub fn rasterize<B: TileBuilder>(path: &Path, transform: Transform, builder: &mu
                     tile_y_prev = tile_y;
                 }
 
-                if row_t1 < col_t1 {
-                    row_t0 = row_t1;
-                    row_t1 = (row_t1 + y_step).min(1.0);
-                    if row_t0 == 1.0 {
-                        break;
-                    } else {
-                        y += y_dir;
-                    }
-                } else {
-                    col_t0 = col_t1;
-                    col_t1 = (col_t1 + x_step).min(1.0);
-                    if col_t0 == 1.0 {
-                        break;
-                    } else {
-                        x += x_dir;
-                    }
+                if row_t0 == 1.0 || col_t0 == 1.0 {
+                    break;
                 }
             }
         }
