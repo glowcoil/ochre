@@ -1,7 +1,7 @@
 use std::ffi::{CStr, CString};
 use gl::types::{GLuint, GLint, GLchar, GLenum, GLvoid, GLsizei};
 
-use ochre::{rasterize, Path, TileBuilder, Transform, TILE_SIZE};
+use ochre::{rasterize, Mat2x2, Path, TileBuilder, Transform, Vec2, TILE_SIZE};
 
 macro_rules! offset {
     ($type:ty, $field:ident) => { &(*(0 as *const $type)).$field as *const _ as usize }
@@ -105,9 +105,16 @@ fn main() {
 
     let mut builder = Builder::new();
 
-    for child in tree.root().children() {
-        match *child.borrow() {
+    fn render(node: &usvg::Node, builder: &mut Builder) {
+        use usvg::NodeExt;
+        match *node.borrow() {
             usvg::NodeKind::Path(ref p) => {
+                let t = node.transform();
+                let transform = Transform::new(Mat2x2::new(
+                    t.a as f32, t.c as f32,
+                    t.b as f32, t.d as f32,
+                ), Vec2::new(t.e as f32, t.f as f32));
+
                 let mut path = Path::new();
                 for segment in p.data.0.iter() {
                     match *segment {
@@ -117,14 +124,7 @@ fn main() {
                         usvg::PathSegment::LineTo { x, y } => {
                             path.line_to(x as f32, y as f32);
                         }
-                        usvg::PathSegment::CurveTo {
-                            x1,
-                            y1,
-                            x2,
-                            y2,
-                            x,
-                            y,
-                        } => {
+                        usvg::PathSegment::CurveTo { x1, y1, x2, y2, x, y } => {
                             path.cubic_to(
                                 x1 as f32, y1 as f32,
                                 x2 as f32, y2 as f32,
@@ -136,22 +136,30 @@ fn main() {
                         }
                     }
                 }
+
                 if let Some(ref fill) = p.fill {
                     if let usvg::Paint::Color(color) = fill.paint {
                         builder.color = [color.red, color.green, color.blue, fill.opacity.to_u8()];
-                        rasterize(&path, Transform::translate(200.0, 200.0), &mut builder);
+                        rasterize(&path, transform, builder);
                     }
                 }
+
                 if let Some(ref stroke) = p.stroke {
                     if let usvg::Paint::Color(color) = stroke.paint {
                         builder.color = [color.red, color.green, color.blue, stroke.opacity.to_u8()];
-                        rasterize(&path.stroke(stroke.width.value() as f32), Transform::translate(200.0, 200.0), &mut builder);
+                        rasterize(&path.stroke(stroke.width.value() as f32), transform, builder);
                     }
                 }
             }
             _ => {}
         }
+
+        for child in node.children() {
+            render(&child, builder);
+        }
     }
+
+    render(&tree.root(), &mut builder);
 
     let prog = Program::new(
         &CStr::from_bytes_with_nul(VERT).unwrap(),
