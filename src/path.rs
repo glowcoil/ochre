@@ -2,6 +2,10 @@ use crate::geom::*;
 
 const TOLERANCE: f32 = 0.1;
 
+/// A 2-dimensional vector path.
+///
+/// Consists of linear, quadratic, cubic, and rational quadratic Bézier
+/// segments, forming zero or more closed or open components.
 #[derive(Clone)]
 pub struct Path {
     pub(crate) commands: Vec<PathCommand>,
@@ -19,6 +23,7 @@ pub(crate) enum PathCommand {
 }
 
 impl Path {
+    /// Constructs a new empty path.
     pub fn new() -> Path {
         Path {
             commands: Vec::new(),
@@ -26,47 +31,60 @@ impl Path {
         }
     }
 
+    /// Ends the current component and begins the next component at the given
+    /// coordinates.
     pub fn move_to(&mut self, x: f32, y: f32) -> &mut Self {
         self.commands.push(PathCommand::Move);
         self.data.extend_from_slice(&[x, y]);
         self
     }
 
+    /// Appends a line segment starting at the current position and ending at
+    /// the given coordinates.
     pub fn line_to(&mut self, x: f32, y: f32) -> &mut Self {
         self.commands.push(PathCommand::Line);
         self.data.extend_from_slice(&[x, y]);
         self
     }
 
+    /// Appends a quadratic Bézier segment starting at the current position
+    /// with the given control point and endpoint.
     pub fn quadratic_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) -> &mut Self {
         self.commands.push(PathCommand::Quadratic);
         self.data.extend_from_slice(&[x1, y1, x, y]);
         self
     }
 
+    /// Appends a cubic Bézier segment starting at the current position with
+    /// the given control points and endpoint.
     pub fn cubic_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) -> &mut Self {
         self.commands.push(PathCommand::Cubic);
         self.data.extend_from_slice(&[x1, y1, x2, y2, x, y]);
         self
     }
 
+    /// Appends a rational quadratic Bézier segment starting at the current
+    /// position with the given control points, endpoint, and weight value.
     pub fn conic_to(&mut self, x1: f32, y1: f32, x: f32, y: f32, weight: f32) -> &mut Self {
         self.commands.push(PathCommand::Conic);
         self.data.extend_from_slice(&[x1, y1, x, y, weight]);
         self
     }
 
+    /// Closes the current path component.
     pub fn close(&mut self) -> &mut Self {
         self.commands.push(PathCommand::Close);
         self
     }
 
+    /// Appends the contents of the given path.
     pub fn push(&mut self, path: &Path) -> &mut Self {
         self.commands.extend_from_slice(&path.commands);
         self.data.extend_from_slice(&path.data);
         self
     }
 
+    /// Adds a rectangle with the given position, width, and height.
     pub fn rect(&mut self, x: f32, y: f32, width: f32, height: f32) -> &mut Self {
         self.move_to(x, y);
         self.line_to(x, y + height);
@@ -77,6 +95,8 @@ impl Path {
         self
     }
 
+    /// Adds a rounded rectangle with the given position, width, height, and
+    /// border radius.
     pub fn round_rect(&mut self, x: f32, y: f32, width: f32, height: f32, radius: f32) -> &mut Self {
         let radius = radius.min(0.5 * width).min(0.5 * height);
         let weight = 0.5 * 2.0f32.sqrt();
@@ -94,6 +114,9 @@ impl Path {
         self
     }
 
+    /// Computes a piecewise-linear approximation of the path to within a
+    /// parametric error tolerance of 0.1, applying the given transform in
+    /// the process.
     pub fn flatten(&self, transform: Transform) -> Path {
         let mut path = Path::new();
         let mut i = 0;
@@ -193,6 +216,10 @@ impl Path {
         path
     }
 
+    /// Converts this path to a stroked path with the given width.
+    ///
+    /// The path is flattened to piecewise-linear in the process. The line-cap
+    /// style is "butt" and the line-join style is "miter."
     pub fn stroke(&self, width: f32) -> Path {
         #[inline]
         fn join(path: &mut Path, width: f32, prev_normal: Vec2, next_normal: Vec2, point: Vec2) {

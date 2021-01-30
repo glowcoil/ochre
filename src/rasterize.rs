@@ -1,12 +1,31 @@
 use crate::{Path, PathCommand, Transform, Vec2};
 
+/// The tile size used by the rasterizer (not configurable).
 pub const TILE_SIZE: usize = 8;
 
+/// A trait to implement for consuming the tile data produced by
+/// [`rasterize()`].
+///
+/// [`rasterize`]: crate::rasterize()
 pub trait TileBuilder {
+    /// Called with the position and data of an alpha mask tile.
     fn tile(&mut self, x: i16, y: i16, data: [u8; TILE_SIZE * TILE_SIZE]);
+
+    /// Called with the position and width of a solid interior span.
+    ///
+    /// The height of a span is always [`TILE_SIZE`] pixels.
+    ///
+    /// [`TILE_SIZE`]: crate::TILE_SIZE
     fn span(&mut self, x: i16, y: i16, width: u16);
 }
 
+/// Rasterizes the given path, passing the results to the given
+/// [`TileBuilder`].
+///
+/// The path is rasterized to a set of 8×8 alpha mask tiles and n×8 solid
+/// interior spans.
+///
+/// [`TileBuilder`]: crate::TileBuilder
 pub fn rasterize<B: TileBuilder>(path: &Path, transform: Transform, builder: &mut B) {
     #[derive(Copy, Clone)]
     pub struct Increment {
