@@ -5,10 +5,10 @@ pub const TILE_SIZE: usize = 8;
 
 const TOLERANCE: f32 = 0.1;
 
-/// A trait to implement for consuming the tile data produced by
-/// [`rasterize()`].
+/// A trait to implement for consuming the tile data produced by a
+/// [`Rasterizer`].
 ///
-/// [`rasterize`]: crate::rasterize()
+/// [`Rasterizer`]: crate::Rasterizer
 pub trait TileBuilder {
     /// Called with the position and data of an alpha mask tile.
     fn tile(&mut self, x: i16, y: i16, data: [u8; TILE_SIZE * TILE_SIZE]);
