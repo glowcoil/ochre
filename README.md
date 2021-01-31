@@ -10,7 +10,7 @@ High-quality anti-aliased vector graphics rendering on the GPU.
 ## Example
 
 ```rust
-use ochre::{rasterize, Path, TileBuilder, Transform, TILE_SIZE};
+use ochre::{PathCmd, Rasterizer, TileBuilder, Transform, Vec2, TILE_SIZE};
 
 struct Builder;
 
@@ -32,14 +32,16 @@ impl TileBuilder for Builder {
 }
 
 fn main() {
-    let mut path = Path::new();
-    path.move_to(400.0, 300.0)
-        .quadratic_to(500.0, 200.0, 400.0, 100.0)
-        .cubic_to(350.0, 150.0, 100.0, 250.0, 400.0, 300.0);
-
     let mut builder = Builder;
 
-    rasterize(&path, Transform::id(), &mut builder);
+    let mut rasterizer = Rasterizer::new();
+    rasterizer.fill(&[
+        PathCmd::Move(Vec2::new(400.0, 300.0)),
+        PathCmd::Quadratic(Vec2::new(500.0, 200.0), Vec2::new(400.0, 100.0)),
+        PathCmd::Cubic(Vec2::new(350.0, 150.0), Vec2::new(100.0, 250.0), Vec2::new(400.0, 300.0)),
+        PathCmd::Close,
+    ], Transform::id());
+    rasterizer.finish(&mut builder);
 }
 ```
 

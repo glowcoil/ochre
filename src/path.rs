@@ -1,349 +1,274 @@
 use crate::geom::*;
 
-const TOLERANCE: f32 = 0.1;
-
-/// A 2-dimensional vector path.
-///
-/// Consists of linear, quadratic, cubic, and rational quadratic Bézier
-/// segments, forming zero or more closed or open components.
-#[derive(Clone)]
-pub struct Path {
-    pub(crate) commands: Vec<PathCommand>,
-    pub(crate) data: Vec<f32>,
-}
-
+/// A single command in a 2-dimensional vector path.
 #[derive(Copy, Clone)]
-pub(crate) enum PathCommand {
-    Move,
-    Line,
-    Quadratic,
-    Cubic,
-    Conic,
+pub enum PathCmd {
+    Move(Vec2),
+    Line(Vec2),
+    Quadratic(Vec2, Vec2),
+    Cubic(Vec2, Vec2, Vec2),
+    Conic(Vec2, Vec2, f32),
     Close,
 }
 
-impl Path {
-    /// Constructs a new empty path.
-    pub fn new() -> Path {
-        Path {
-            commands: Vec::new(),
-            data: Vec::new(),
-        }
-    }
-
-    /// Ends the current component and begins the next component at the given
-    /// coordinates.
-    pub fn move_to(&mut self, x: f32, y: f32) -> &mut Self {
-        self.commands.push(PathCommand::Move);
-        self.data.extend_from_slice(&[x, y]);
-        self
-    }
-
-    /// Appends a line segment starting at the current position and ending at
-    /// the given coordinates.
-    pub fn line_to(&mut self, x: f32, y: f32) -> &mut Self {
-        self.commands.push(PathCommand::Line);
-        self.data.extend_from_slice(&[x, y]);
-        self
-    }
-
-    /// Appends a quadratic Bézier segment starting at the current position
-    /// with the given control point and endpoint.
-    pub fn quadratic_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) -> &mut Self {
-        self.commands.push(PathCommand::Quadratic);
-        self.data.extend_from_slice(&[x1, y1, x, y]);
-        self
-    }
-
-    /// Appends a cubic Bézier segment starting at the current position with
-    /// the given control points and endpoint.
-    pub fn cubic_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) -> &mut Self {
-        self.commands.push(PathCommand::Cubic);
-        self.data.extend_from_slice(&[x1, y1, x2, y2, x, y]);
-        self
-    }
-
-    /// Appends a rational quadratic Bézier segment starting at the current
-    /// position with the given control points, endpoint, and weight value.
-    pub fn conic_to(&mut self, x1: f32, y1: f32, x: f32, y: f32, weight: f32) -> &mut Self {
-        self.commands.push(PathCommand::Conic);
-        self.data.extend_from_slice(&[x1, y1, x, y, weight]);
-        self
-    }
-
-    /// Closes the current path component.
-    pub fn close(&mut self) -> &mut Self {
-        self.commands.push(PathCommand::Close);
-        self
-    }
-
-    /// Appends the contents of the given path.
-    pub fn push(&mut self, path: &Path) -> &mut Self {
-        self.commands.extend_from_slice(&path.commands);
-        self.data.extend_from_slice(&path.data);
-        self
-    }
-
-    /// Adds a rectangle with the given position, width, and height.
-    pub fn rect(&mut self, x: f32, y: f32, width: f32, height: f32) -> &mut Self {
-        self.move_to(x, y);
-        self.line_to(x, y + height);
-        self.line_to(x + width, y + height);
-        self.line_to(x + width, y);
-        self.line_to(x, y);
-        self.close();
-        self
-    }
-
-    /// Adds a rounded rectangle with the given position, width, height, and
-    /// border radius.
-    pub fn round_rect(&mut self, x: f32, y: f32, width: f32, height: f32, radius: f32) -> &mut Self {
-        let radius = radius.min(0.5 * width).min(0.5 * height);
-        let weight = 0.5 * 2.0f32.sqrt();
-
-        self.move_to(x + radius, y);
-        self.conic_to(x, y, x, y + radius, weight);
-        self.line_to(x, y + height - radius);
-        self.conic_to(x, y + height, x + radius, y + height, weight);
-        self.line_to(x + width - radius, y + height);
-        self.conic_to(x + width, y + height, x + width, y + height - radius, weight);
-        self.line_to(x + width, y + radius);
-        self.conic_to(x + width, y, x + width - radius, y, weight);
-        self.line_to(x + radius, y);
-        self.close();
-        self
-    }
-
-    /// Computes a piecewise-linear approximation of the path to within a
-    /// parametric error tolerance of 0.1, applying the given transform in
-    /// the process.
-    pub fn flatten(&self, transform: Transform) -> Path {
-        let mut path = Path::new();
-        let mut i = 0;
-        let mut last = Vec2::new(0.0, 0.0);
-        for command in self.commands.iter() {
-            match command {
-                PathCommand::Move => {
-                    let point = transform.apply(Vec2::new(self.data[i], self.data[i + 1]));
-                    path.move_to(point.x, point.y);
-                    last = point;
-                    i += 2;
-                }
-                PathCommand::Line => {
-                    let point = transform.apply(Vec2::new(self.data[i], self.data[i + 1]));
-                    path.line_to(point.x, point.y);
-                    last = point;
-                    i += 2;
-                }
-                PathCommand::Quadratic => {
-                    let control = transform.apply(Vec2::new(self.data[i], self.data[i + 1]));
-                    let point = transform.apply(Vec2::new(self.data[i + 2], self.data[i + 3]));
-                    let dt = ((4.0 * TOLERANCE) / (last - 2.0 * control + point).length()).sqrt();
-                    let mut t = 0.0;
-                    while t < 1.0 {
-                        t = (t + dt).min(1.0);
-                        let p01 = Vec2::lerp(t, last, control);
-                        let p12 = Vec2::lerp(t, control, point);
-                        let p = Vec2::lerp(t, p01, p12);
-                        path.line_to(p.x, p.y);
-                    }
-                    last = point;
-                    i += 4;
-                }
-                PathCommand::Cubic => {
-                    let control1 = transform.apply(Vec2::new(self.data[i], self.data[i + 1]));
-                    let control2 = transform.apply(Vec2::new(self.data[i + 2], self.data[i + 3]));
-                    let point = transform.apply(Vec2::new(self.data[i + 4], self.data[i + 5]));
-                    let a = -1.0 * last + 3.0 * control1 - 3.0 * control2 + point;
-                    let b = 3.0 * (last - 2.0 * control1 + control2);
-                    let conc = b.length().max((a + b).length());
-                    let dt = ((8.0f32.sqrt() * TOLERANCE) / conc).sqrt();
-                    let mut t = 0.0;
-                    while t < 1.0 {
-                        t = (t + dt).min(1.0);
-                        let p01 = Vec2::lerp(t, last, control1);
-                        let p12 = Vec2::lerp(t, control1, control2);
-                        let p23 = Vec2::lerp(t, control2, point);
-                        let p012 = Vec2::lerp(t, p01, p12);
-                        let p123 = Vec2::lerp(t, p12, p23);
-                        let p = Vec2::lerp(t, p012, p123);
-                        path.line_to(p.x, p.y);
-                    }
-                    last = point;
-                    i += 6;
-                }
-                PathCommand::Conic => {
-                    let control = transform.apply(Vec2::new(self.data[i], self.data[i + 1]));
-                    let point = transform.apply(Vec2::new(self.data[i + 2], self.data[i + 3]));
-                    let weight = self.data[i + 4];
-
-                    fn flatten_conic(
-                        last: Vec2,
-                        control: Vec2,
-                        point: Vec2,
-                        weight: f32,
-                        t0: f32,
-                        t1: f32,
-                        p0: Vec2,
-                        p1: Vec2,
-                        path: &mut Path,
-                    ) {
-                        let t = 0.5 * (t0 + t1);
-                        let p01 = Vec2::lerp(t, last, weight * control);
-                        let p12 = Vec2::lerp(t, weight * control, point);
-                        let denom = (1.0 - t) * (1.0 - t) + 2.0 * t * (1.0 - t) * weight + t * t;
-                        let midpoint = (1.0 / denom) * Vec2::lerp(t, p01, p12);
-                        let err = (midpoint - 0.5 * (p0 + p1)).length();
-                        if err > TOLERANCE {
-                            flatten_conic(last, control, point, weight, t0, t, p0, midpoint, path);
-                            flatten_conic(last, control, point, weight, t, t1, midpoint, p1, path);
-                        } else {
-                            path.line_to(midpoint.x, midpoint.y);
-                            path.line_to(p1.x, p1.y);
-                        }
-                    };
-                    flatten_conic(last, control, point, weight, 0.0, 1.0, last, point, &mut path);
-
-                    last = point;
-                    i += 5;
-                }
-                PathCommand::Close => {
-                    path.close();
-                }
+impl PathCmd {
+    /// Applies the given transform to the path command.
+    pub fn transform(&self, transform: Transform) -> PathCmd {
+        match *self {
+            PathCmd::Move(point) => {
+                PathCmd::Move(transform.apply(point))
+            }
+            PathCmd::Line(point) => {
+                PathCmd::Line(transform.apply(point))
+            }
+            PathCmd::Quadratic(control, point) => {
+                PathCmd::Quadratic(transform.apply(control), transform.apply(point))
+            }
+            PathCmd::Cubic(control1, control2, point) => {
+                PathCmd::Cubic(transform.apply(control1), transform.apply(control2), transform.apply(point))
+            }
+            PathCmd::Conic(control, point, weight) => {
+                PathCmd::Conic(transform.apply(control), transform.apply(point), weight)
+            }
+            PathCmd::Close => {
+                PathCmd::Close
             }
         }
-
-        path
     }
 
-    /// Converts this path to a stroked path with the given width.
-    ///
-    /// The path is flattened to piecewise-linear in the process. The line-cap
-    /// style is "butt" and the line-join style is "miter."
-    pub fn stroke(&self, width: f32) -> Path {
-        #[inline]
-        fn join(path: &mut Path, width: f32, prev_normal: Vec2, next_normal: Vec2, point: Vec2) {
-            let offset = 1.0 / (1.0 + prev_normal.dot(next_normal));
-            if offset.abs() > 2.0 {
-                let point1 = point + 0.5 * width * prev_normal;
-                let point2 = point + 0.5 * width * next_normal;
-                path.data.extend_from_slice(&[point1.x, point1.y, point2.x, point2.y]);
-            } else {
-                let point = point + 0.5 * width * offset * (prev_normal + next_normal);
-                path.data.extend_from_slice(&[point.x, point.y]);
+    /// Computes a piecewise-linear approximation of the given path command to
+    /// within the supplied parametric error tolerance.
+    pub fn flatten(&self, last: Vec2, tolerance: f32, mut callback: impl FnMut(PathCmd)) {
+        match *self {
+            PathCmd::Move(point) => {
+                (callback)(PathCmd::Move(point));
             }
-        }
-
-        #[inline]
-        fn offset(path: &mut Path, width: f32, contour: &[f32], closed: bool, reverse: bool) {
-            let first_point = if closed == reverse {
-                Vec2::new(contour[0], contour[1])
-            } else {
-                Vec2::new(contour[contour.len() - 2], contour[contour.len() - 1])
-            };
-            let mut prev_point = first_point;
-            let mut prev_normal = Vec2::new(0.0, 0.0);
-            let mut i = 0;
-            loop {
-                let next_point = if i + 2 <= contour.len() {
-                    if reverse {
-                        Vec2::new(contour[contour.len() - i - 2], contour[contour.len() - i - 1])
+            PathCmd::Line(point) => {
+                (callback)(PathCmd::Line(point));
+            }
+            PathCmd::Quadratic(control, point) => {
+                let dt = ((4.0 * tolerance) / (last - 2.0 * control + point).length()).sqrt();
+                let mut t = 0.0;
+                while t < 1.0 {
+                    t = (t + dt).min(1.0);
+                    let p01 = Vec2::lerp(t, last, control);
+                    let p12 = Vec2::lerp(t, control, point);
+                    (callback)(PathCmd::Line(Vec2::lerp(t, p01, p12)));
+                }
+            }
+            PathCmd::Cubic(control1, control2, point) => {
+                let a = -1.0 * last + 3.0 * control1 - 3.0 * control2 + point;
+                let b = 3.0 * (last - 2.0 * control1 + control2);
+                let conc = b.length().max((a + b).length());
+                let dt = ((8.0f32.sqrt() * tolerance) / conc).sqrt();
+                let mut t = 0.0;
+                while t < 1.0 {
+                    t = (t + dt).min(1.0);
+                    let p01 = Vec2::lerp(t, last, control1);
+                    let p12 = Vec2::lerp(t, control1, control2);
+                    let p23 = Vec2::lerp(t, control2, point);
+                    let p012 = Vec2::lerp(t, p01, p12);
+                    let p123 = Vec2::lerp(t, p12, p23);
+                    (callback)(PathCmd::Line(Vec2::lerp(t, p012, p123)));
+                }
+            }
+            PathCmd::Conic(control, point, weight) => {
+                fn flatten_conic(
+                    last: Vec2,
+                    control: Vec2,
+                    point: Vec2,
+                    weight: f32,
+                    t0: f32,
+                    t1: f32,
+                    p0: Vec2,
+                    p1: Vec2,
+                    tolerance: f32,
+                    callback: &mut impl FnMut(PathCmd),
+                ) {
+                    let t = 0.5 * (t0 + t1);
+                    let p01 = Vec2::lerp(t, last, weight * control);
+                    let p12 = Vec2::lerp(t, weight * control, point);
+                    let denom = (1.0 - t) * (1.0 - t) + 2.0 * t * (1.0 - t) * weight + t * t;
+                    let midpoint = (1.0 / denom) * Vec2::lerp(t, p01, p12);
+                    let err = (midpoint - 0.5 * (p0 + p1)).length();
+                    if err > tolerance {
+                        flatten_conic(last, control, point, weight, t0, t, p0, midpoint, tolerance, callback);
+                        flatten_conic(last, control, point, weight, t, t1, midpoint, p1, tolerance, callback);
                     } else {
-                        Vec2::new(contour[i], contour[i + 1])
+                        (callback)(PathCmd::Line(midpoint));
+                        (callback)(PathCmd::Line(p1));
                     }
-                } else {
-                    first_point
                 };
 
-                if next_point != prev_point || i == contour.len() {
-                    let next_tangent = next_point - prev_point;
-                    let next_normal = Vec2::new(-next_tangent.y, next_tangent.x);
-                    let next_normal_len = next_normal.length();
-                    let next_normal = if next_normal_len == 0.0 {
-                        Vec2::new(0.0, 0.0)
-                    } else {
-                        next_normal * (1.0 / next_normal_len)
-                    };
-
-                    join(path, width, prev_normal, next_normal, prev_point);
-
-                    prev_point = next_point;
-                    prev_normal = next_normal;
-                }
-
-                i += 2;
-                if i > contour.len() {
-                    break;
-                }
+                flatten_conic(last, control, point, weight, 0.0, 1.0, last, point, tolerance, &mut callback);
+            }
+            PathCmd::Close => {
+                (callback)(PathCmd::Close);
             }
         }
+    }
+}
 
-        let mut path = Path::new();
+/// Computes a piecewise-linear approximation of the given path to within the
+/// supplied parametric error tolerance.
+pub fn flatten(path: &[PathCmd], tolerance: f32) -> Vec<PathCmd> {
+    let mut last = Vec2::new(0.0, 0.0);
+    let mut output = Vec::new();
 
-        let flattened = self.flatten(Transform::id());
+    for command in path {
+        command.flatten(last, tolerance, |cmd| {
+            output.push(cmd);
+        });
 
-        let mut contour_start = 0;
-        let mut contour_end = 0;
-        let mut closed = false;
-        let mut commands = flattened.commands.iter();
-        loop {
-            let command = commands.next();
-
-            if let None | Some(PathCommand::Move) = command {
-                if contour_start != contour_end {
-                    let contour = &flattened.data[contour_start..contour_end];
-
-                    let base = path.data.len();
-
-                    offset(&mut path, width, contour, closed, false);
-
-                    if path.data.len() > base {
-                        path.commands.push(PathCommand::Move);
-                        for _ in 0..((path.data.len() - base) / 2 - 1) {
-                            path.commands.push(PathCommand::Line);
-                        }
-                        if closed {
-                            path.commands.push(PathCommand::Close);
-                        }
-                    }
-
-                    let base = path.data.len();
-
-                    offset(&mut path, width, contour, closed, true);
-
-                    if path.data.len() > base {
-                        if closed {
-                            path.commands.push(PathCommand::Move);
-                        } else {
-                            path.commands.push(PathCommand::Line);
-                        }
-                        for _ in 0..((path.data.len() - base) / 2 - 1) {
-                            path.commands.push(PathCommand::Line);
-                        }
-                        path.commands.push(PathCommand::Close);
-                    }
-                }
+        match *command {
+            PathCmd::Move(point) => {
+                last = point;
             }
+            PathCmd::Line(point) => {
+                last = point;
+            }
+            PathCmd::Quadratic(_, point) => {
+                last = point;
+            }
+            PathCmd::Cubic(_, _, point) => {
+                last = point;
+            }
+            PathCmd::Conic(_, point, _) => {
+                last = point;
+            }
+            PathCmd::Close => {}
+        }
+    }
 
-            if let Some(command) = command {
-                match command {
-                    PathCommand::Move => {
-                        contour_start = contour_end;
-                        contour_end += 2;
-                    }
-                    PathCommand::Line => {
-                        contour_end += 2;
-                    }
-                    PathCommand::Close => {
-                        closed = true;
-                    }
-                    _ => {}
+    output
+}
+
+/// Converts the given path to a stroked path with the given width.
+///
+/// This function will panic if the given path is not piecewise-linear (i.e. if
+/// it contains [`PathCmd`]s other than `Move`, `Line`, or `Close`.
+///
+/// The line-cap style is "butt" and the line-join style is "miter."
+pub fn stroke(polygon: &[PathCmd], width: f32) -> Vec<PathCmd> {
+    #[inline]
+    fn get_point(command: PathCmd) -> Vec2 {
+        match command {
+            PathCmd::Move(point) => point,
+            PathCmd::Line(point) => point,
+            _ => unreachable!(),
+        }
+    }
+
+    #[inline]
+    fn join(path: &mut Vec<PathCmd>, width: f32, prev_normal: Vec2, next_normal: Vec2, point: Vec2) {
+        let offset = 1.0 / (1.0 + prev_normal.dot(next_normal));
+        if offset.abs() > 2.0 {
+            path.push(PathCmd::Line(point + 0.5 * width * prev_normal));
+            path.push(PathCmd::Line(point + 0.5 * width * next_normal));
+        } else {
+            path.push(PathCmd::Line(point + 0.5 * width * offset * (prev_normal + next_normal)));
+        }
+    }
+
+    #[inline]
+    fn offset(path: &mut Vec<PathCmd>, width: f32, contour: &[PathCmd], closed: bool, reverse: bool) {
+        let first_point = if closed == reverse {
+            get_point(contour[0])
+        } else {
+            get_point(*contour.last().unwrap())
+        };
+        let mut prev_point = first_point;
+        let mut prev_normal = Vec2::new(0.0, 0.0);
+        let mut i = 0;
+        loop {
+            let next_point = if i < contour.len() {
+                if reverse {
+                    get_point(contour[contour.len() - i - 1])
+                } else {
+                    get_point(contour[i])
                 }
             } else {
+                first_point
+            };
+
+            if next_point != prev_point || i == contour.len() {
+                let next_tangent = next_point - prev_point;
+                let next_normal = Vec2::new(-next_tangent.y, next_tangent.x);
+                let next_normal_len = next_normal.length();
+                let next_normal = if next_normal_len == 0.0 {
+                    Vec2::new(0.0, 0.0)
+                } else {
+                    next_normal * (1.0 / next_normal_len)
+                };
+
+                join(path, width, prev_normal, next_normal, prev_point);
+
+                prev_point = next_point;
+                prev_normal = next_normal;
+            }
+
+            i += 1;
+            if i > contour.len() {
                 break;
             }
         }
-
-        path
     }
+
+    let mut output = Vec::new();
+
+    let mut contour_start = 0;
+    let mut contour_end = 0;
+    let mut closed = false;
+    let mut commands = polygon.iter();
+    loop {
+        let command = commands.next();
+
+        if let Some(PathCmd::Close) = command {
+            closed = true;
+        }
+
+        if let None | Some(PathCmd::Move(_)) | Some(PathCmd::Close) = command {
+            if contour_start != contour_end {
+                let contour = &polygon[contour_start..contour_end];
+
+                let base = output.len();
+                offset(&mut output, width, contour, closed, false);
+                output[base] = PathCmd::Move(get_point(output[base]));
+                if closed {
+                    output.push(PathCmd::Close);
+                }
+
+                let base = output.len();
+                offset(&mut output, width, contour, closed, true);
+                if closed {
+                    output[base] = PathCmd::Move(get_point(output[base]));
+                }
+                output.push(PathCmd::Close);
+            }
+        }
+
+        if let Some(command) = command {
+            match command {
+                PathCmd::Move(_) => {
+                    contour_start = contour_end;
+                    contour_end = contour_start + 1;
+                }
+                PathCmd::Line(_) => {
+                    contour_end += 1;
+                }
+                PathCmd::Close => {
+                    contour_start = contour_end + 1;
+                    contour_end = contour_start;
+                    closed = true;
+                }
+                _ => {
+                    panic!();
+                }
+            }
+        } else {
+            break;
+        }
+    }
+
+    output
 }

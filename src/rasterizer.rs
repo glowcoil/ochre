@@ -1,7 +1,9 @@
-use crate::{Path, PathCommand, Transform, Vec2};
+use crate::{flatten, stroke, PathCmd, Transform, Vec2};
 
 /// The tile size used by the rasterizer (not configurable).
 pub const TILE_SIZE: usize = 8;
+
+const TOLERANCE: f32 = 0.1;
 
 /// A trait to implement for consuming the tile data produced by
 /// [`rasterize()`].
@@ -34,6 +36,7 @@ struct TileIncrement {
     sign: i8,
 }
 
+/// Rasterizes paths.
 pub struct Rasterizer {
     increments: Vec<Increment>,
     tile_increments: Vec<TileIncrement>,
@@ -43,6 +46,7 @@ pub struct Rasterizer {
 }
 
 impl Rasterizer {
+    /// Initializes a new rasterizer.
     pub fn new() -> Rasterizer {
         Rasterizer {
             increments: Vec::new(),
@@ -53,6 +57,7 @@ impl Rasterizer {
         }
     }
 
+    /// Begins a new path component starting at the given location.
     pub fn move_to(&mut self, point: Vec2) {
         if self.last != self.first {
             self.line_to(self.first);
@@ -63,6 +68,7 @@ impl Rasterizer {
         self.tile_y_prev = (point.y.floor() as i16).wrapping_div_euclid(TILE_SIZE as i16);
     }
 
+    /// Adds a line segment to be rasterized.
     pub fn line_to(&mut self, point: Vec2) {
         if point != self.last {
             let x_dir = (point.x - self.last.x).signum() as i16;
@@ -133,6 +139,44 @@ impl Rasterizer {
         self.last = point;
     }
 
+    /// Adds a [`PathCmd`] to be rasterized.
+    ///
+    /// [`PathCmd`]: crate::PathCmd 
+    pub fn command(&mut self, command: PathCmd) {
+        command.flatten(self.last, TOLERANCE, |cmd| {
+            match cmd {
+                PathCmd::Move(point) => {
+                    self.move_to(point);
+                }
+                PathCmd::Line(point) => {
+                    self.line_to(point);
+                }
+                _ => {}
+            }
+        });
+    }
+
+    /// Adds a path to be rasterized as a filled region, applying the given
+    /// transform.
+    pub fn fill(&mut self, path: &[PathCmd], transform: Transform) {
+        for command in path {
+            self.command(command.transform(transform));
+        }
+    }
+
+    /// Adds a path to be rasterized as a stroke with the given width, applying
+    /// the given transform.
+    pub fn stroke(&mut self, path: &[PathCmd], width: f32, transform: Transform) {
+        self.fill(&stroke(&flatten(path, TOLERANCE), width), transform);
+    }
+
+    /// Rasterizes the accumulated path data, passing the results to the given
+    /// [`TileBuilder`]. Consumes the rasterizer.
+    ///
+    /// The path is rasterized to a set of 8×8 alpha mask tiles and n×8 solid
+    /// interior spans.
+    ///
+    /// [`TileBuilder`]: crate::TileBuilder
     pub fn finish<B: TileBuilder>(mut self, builder: &mut B) {
         if self.last != self.first {
             self.line_to(self.first);
@@ -222,36 +266,4 @@ impl Rasterizer {
             }
         }
     }
-}
-
-/// Rasterizes the given path, passing the results to the given
-/// [`TileBuilder`].
-///
-/// The path is rasterized to a set of 8×8 alpha mask tiles and n×8 solid
-/// interior spans.
-///
-/// [`TileBuilder`]: crate::TileBuilder
-pub fn rasterize<B: TileBuilder>(path: &Path, transform: Transform, builder: &mut B) {
-    let flattened = path.flatten(transform);
-
-    let mut rasterizer = Rasterizer::new();
-
-    let mut i = 0;
-    for command in flattened.commands.iter() {
-        match command {
-            PathCommand::Move => {
-                let point = Vec2::new(flattened.data[i], flattened.data[i + 1]);
-                rasterizer.move_to(point);
-                i += 2;
-            }
-            PathCommand::Line => {
-                let point = Vec2::new(flattened.data[i], flattened.data[i + 1]);
-                rasterizer.line_to(point);
-                i += 2;
-            }
-            _ => {}
-        }
-    }
-
-    rasterizer.finish(builder);
 }

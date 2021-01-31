@@ -1,7 +1,7 @@
 use std::ffi::{CStr, CString};
 use gl::types::{GLuint, GLint, GLchar, GLenum, GLvoid, GLsizei};
 
-use ochre::{rasterize, Mat2x2, Path, TileBuilder, Transform, Vec2, TILE_SIZE};
+use ochre::{Mat2x2, PathCmd, Rasterizer, TileBuilder, Transform, Vec2, TILE_SIZE};
 
 macro_rules! offset {
     ($type:ty, $field:ident) => { &(*(0 as *const $type)).$field as *const _ as usize }
@@ -115,39 +115,43 @@ fn main() {
                     t.b as f32, t.d as f32,
                 ), Vec2::new(t.e as f32, t.f as f32));
 
-                let mut path = Path::new();
+                let mut path = Vec::new();
                 for segment in p.data.0.iter() {
                     match *segment {
                         usvg::PathSegment::MoveTo { x, y } => {
-                            path.move_to(x as f32, y as f32);
+                            path.push(PathCmd::Move(Vec2::new(x as f32, y as f32)));
                         }
                         usvg::PathSegment::LineTo { x, y } => {
-                            path.line_to(x as f32, y as f32);
+                            path.push(PathCmd::Line(Vec2::new(x as f32, y as f32)));
                         }
                         usvg::PathSegment::CurveTo { x1, y1, x2, y2, x, y } => {
-                            path.cubic_to(
-                                x1 as f32, y1 as f32,
-                                x2 as f32, y2 as f32,
-                                x as f32, y as f32,
-                            );
+                            path.push(PathCmd::Cubic(
+                                Vec2::new(x1 as f32, y1 as f32),
+                                Vec2::new(x2 as f32, y2 as f32),
+                                Vec2::new(x as f32, y as f32),
+                            ));
                         }
                         usvg::PathSegment::ClosePath => {
-                            path.close();
+                            path.push(PathCmd::Close);
                         }
                     }
                 }
 
-                if let Some(ref fill) = p.fill {
-                    if let usvg::Paint::Color(color) = fill.paint {
-                        builder.color = [color.red, color.green, color.blue, fill.opacity.to_u8()];
-                        rasterize(&path, transform, builder);
+                if let Some(ref f) = p.fill {
+                    if let usvg::Paint::Color(color) = f.paint {
+                        builder.color = [color.red, color.green, color.blue, f.opacity.to_u8()];
+                        let mut rasterizer = Rasterizer::new();
+                        rasterizer.fill(&path, transform);
+                        rasterizer.finish(builder);
                     }
                 }
 
-                if let Some(ref stroke) = p.stroke {
-                    if let usvg::Paint::Color(color) = stroke.paint {
-                        builder.color = [color.red, color.green, color.blue, stroke.opacity.to_u8()];
-                        rasterize(&path.stroke(stroke.width.value() as f32), transform, builder);
+                if let Some(ref s) = p.stroke {
+                    if let usvg::Paint::Color(color) = s.paint {
+                        builder.color = [color.red, color.green, color.blue, s.opacity.to_u8()];
+                        let mut rasterizer = Rasterizer::new();
+                        rasterizer.stroke(&path, s.width.value() as f32, transform);
+                        rasterizer.finish(builder);
                     }
                 }
             }
