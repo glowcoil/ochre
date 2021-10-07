@@ -45,6 +45,15 @@ fn main() {
 }
 ```
 
+## Run Examples
+
+```bash
+cargo run --example basic
+cargo run --example svg examples/res/calabi-yau.svg
+cargo run --example svg examples/res/Ghostscript_Tiger.svg
+cargo run --example svg examples/res/lorem-ipsum.svg
+```
+
 ## License
 
 `ochre` is distributed under the terms of both the [MIT license](LICENSE-MIT) and the [Apache license, version 2.0](LICENSE-APACHE). Contributions are accepted under the same terms.

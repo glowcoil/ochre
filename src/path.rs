@@ -98,7 +98,7 @@ impl PathCmd {
                         (callback)(PathCmd::Line(midpoint));
                         (callback)(PathCmd::Line(p1));
                     }
-                };
+                }
 
                 flatten_conic(last, control, point, weight, 0.0, 1.0, last, point, tolerance, &mut callback);
             }
