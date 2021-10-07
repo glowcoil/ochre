@@ -11,6 +11,6 @@ license = "MIT/Apache-2.0"
 [dependencies]
 
 [dev-dependencies]
-glutin = "*"
-gl = "*"
-usvg = "*"
+glutin = "0.27"
+gl = "0.14"
+usvg = "0.19"
