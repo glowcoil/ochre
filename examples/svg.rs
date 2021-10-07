@@ -1,10 +1,20 @@
-use std::ffi::{CStr, CString};
-use gl::types::{GLuint, GLint, GLchar, GLenum, GLvoid, GLsizei};
-
+#![allow(deref_nullptr)]
+use gl::types::{GLchar, GLenum, GLint, GLsizei, GLuint, GLvoid};
+use glutin::{
+    dpi::LogicalSize,
+    event::{Event, WindowEvent},
+    event_loop::{ControlFlow, EventLoop},
+    window::WindowBuilder,
+    ContextBuilder,
+};
 use ochre::{Mat2x2, PathCmd, Rasterizer, TileBuilder, Transform, Vec2, TILE_SIZE};
+use std::{ffi::{CStr, CString}, fs::File};
+use std::io::Read;
 
 macro_rules! offset {
-    ($type:ty, $field:ident) => { &(*(0 as *const $type)).$field as *const _ as usize }
+    ($type:ty, $field:ident) => {
+        &(*(0 as *const $type)).$field as *const _ as usize
+    };
 }
 
 const SCREEN_WIDTH: u32 = 800;
@@ -51,21 +61,41 @@ impl Builder {
 impl TileBuilder for Builder {
     fn tile(&mut self, x: i16, y: i16, data: [u8; TILE_SIZE * TILE_SIZE]) {
         let base = self.vertices.len() as u32;
-       
+
         let u1 = self.next_col * TILE_SIZE as u16;
         let u2 = (self.next_col + 1) * TILE_SIZE as u16;
         let v1 = self.next_row * TILE_SIZE as u16;
         let v2 = (self.next_row + 1) * TILE_SIZE as u16;
-          
-        self.vertices.push(Vertex { pos: [x, y], col: self.color, uv: [u1, v1] });
-        self.vertices.push(Vertex { pos: [x + TILE_SIZE as i16, y], col: self.color, uv: [u2, v1] });
-        self.vertices.push(Vertex { pos: [x + TILE_SIZE as i16, y + TILE_SIZE as i16], col: self.color, uv: [u2, v2] });
-        self.vertices.push(Vertex { pos: [x, y + TILE_SIZE as i16], col: self.color, uv: [u1, v2] });
-        self.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+
+        self.vertices.push(Vertex {
+            pos: [x, y],
+            col: self.color,
+            uv: [u1, v1],
+        });
+        self.vertices.push(Vertex {
+            pos: [x + TILE_SIZE as i16, y],
+            col: self.color,
+            uv: [u2, v1],
+        });
+        self.vertices.push(Vertex {
+            pos: [x + TILE_SIZE as i16, y + TILE_SIZE as i16],
+            col: self.color,
+            uv: [u2, v2],
+        });
+        self.vertices.push(Vertex {
+            pos: [x, y + TILE_SIZE as i16],
+            col: self.color,
+            uv: [u1, v2],
+        });
+        self.indices
+            .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
 
         for row in 0..TILE_SIZE {
             for col in 0..TILE_SIZE {
-                self.atlas[self.next_row as usize * TILE_SIZE * ATLAS_SIZE + row * ATLAS_SIZE + self.next_col as usize * TILE_SIZE + col] = data[row * TILE_SIZE + col];
+                self.atlas[self.next_row as usize * TILE_SIZE * ATLAS_SIZE
+                    + row * ATLAS_SIZE
+                    + self.next_col as usize * TILE_SIZE
+                    + col] = data[row * TILE_SIZE + col];
             }
         }
 
@@ -79,20 +109,37 @@ impl TileBuilder for Builder {
     fn span(&mut self, x: i16, y: i16, width: u16) {
         let base = self.vertices.len() as u32;
 
-        self.vertices.push(Vertex { pos: [x, y], col: self.color, uv: [0, 0] });
-        self.vertices.push(Vertex { pos: [x + (width as i16), y], col: self.color, uv: [0, 0] });
-        self.vertices.push(Vertex { pos: [x + (width as i16), y + TILE_SIZE as i16], col: self.color, uv: [0, 0] });
-        self.vertices.push(Vertex { pos: [x, y + TILE_SIZE as i16], col: self.color, uv: [0, 0] });
-        self.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+        self.vertices.push(Vertex {
+            pos: [x, y],
+            col: self.color,
+            uv: [0, 0],
+        });
+        self.vertices.push(Vertex {
+            pos: [x + (width as i16), y],
+            col: self.color,
+            uv: [0, 0],
+        });
+        self.vertices.push(Vertex {
+            pos: [x + (width as i16), y + TILE_SIZE as i16],
+            col: self.color,
+            uv: [0, 0],
+        });
+        self.vertices.push(Vertex {
+            pos: [x, y + TILE_SIZE as i16],
+            col: self.color,
+            uv: [0, 0],
+        });
+        self.indices
+            .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
 }
 
 fn main() {
-    let mut events_loop = glutin::EventsLoop::new();
-    let window_builder = glutin::WindowBuilder::new()
-        .with_dimensions(glutin::dpi::LogicalSize::new(SCREEN_WIDTH as f64, SCREEN_HEIGHT as f64))
+    let events_loop = EventLoop::new();
+    let window_builder = WindowBuilder::new()
+        .with_min_inner_size(LogicalSize::new(SCREEN_WIDTH as f64, SCREEN_HEIGHT as f64))
         .with_title("ochre");
-    let context = glutin::ContextBuilder::new()
+    let context = ContextBuilder::new()
         .with_vsync(false)
         .build_windowed(window_builder, &events_loop)
         .unwrap();
@@ -101,7 +148,9 @@ fn main() {
     gl::load_with(|symbol| context.get_proc_address(symbol) as *const _);
 
     let path = std::env::args().nth(1).expect("provide an svg file");
-    let tree = usvg::Tree::from_file(path, &usvg::Options::default()).unwrap();
+    let mut string = String::new();
+    File::open(&path).unwrap().read_to_string(&mut string).unwrap();
+    let tree = usvg::Tree::from_str(&string, &usvg::Options::default().to_ref()).unwrap();
 
     let mut builder = Builder::new();
 
@@ -110,10 +159,10 @@ fn main() {
         match *node.borrow() {
             usvg::NodeKind::Path(ref p) => {
                 let t = node.transform();
-                let transform = Transform::new(Mat2x2::new(
-                    t.a as f32, t.c as f32,
-                    t.b as f32, t.d as f32,
-                ), Vec2::new(t.e as f32, t.f as f32));
+                let transform = Transform::new(
+                    Mat2x2::new(t.a as f32, t.c as f32, t.b as f32, t.d as f32),
+                    Vec2::new(t.e as f32, t.f as f32),
+                );
 
                 let mut path = Vec::new();
                 for segment in p.data.0.iter() {
@@ -124,7 +173,14 @@ fn main() {
                         usvg::PathSegment::LineTo { x, y } => {
                             path.push(PathCmd::Line(Vec2::new(x as f32, y as f32)));
                         }
-                        usvg::PathSegment::CurveTo { x1, y1, x2, y2, x, y } => {
+                        usvg::PathSegment::CurveTo {
+                            x1,
+                            y1,
+                            x2,
+                            y2,
+                            x,
+                            y,
+                        } => {
                             path.push(PathCmd::Cubic(
                                 Vec2::new(x1 as f32, y1 as f32),
                                 Vec2::new(x2 as f32, y2 as f32),
@@ -167,7 +223,9 @@ fn main() {
 
     let prog = Program::new(
         &CStr::from_bytes_with_nul(VERT).unwrap(),
-        &CStr::from_bytes_with_nul(FRAG).unwrap()).unwrap();
+        &CStr::from_bytes_with_nul(FRAG).unwrap(),
+    )
+    .unwrap();
 
     unsafe {
         gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
@@ -181,7 +239,17 @@ fn main() {
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
         gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
-        gl::TexImage2D(gl::TEXTURE_2D, 0, gl::R8 as GLint, ATLAS_SIZE as GLsizei, ATLAS_SIZE as GLsizei, 0, gl::RED, gl::UNSIGNED_BYTE, builder.atlas.as_ptr() as *const std::ffi::c_void);
+        gl::TexImage2D(
+            gl::TEXTURE_2D,
+            0,
+            gl::R8 as GLint,
+            ATLAS_SIZE as GLsizei,
+            ATLAS_SIZE as GLsizei,
+            0,
+            gl::RED,
+            gl::UNSIGNED_BYTE,
+            builder.atlas.as_ptr() as *const std::ffi::c_void,
+        );
     }
 
     let mut vbo: GLuint = 0;
@@ -193,23 +261,54 @@ fn main() {
 
         gl::GenBuffers(1, &mut vbo);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-        gl::BufferData(gl::ARRAY_BUFFER, (builder.vertices.len() * std::mem::size_of::<Vertex>()) as isize, builder.vertices.as_ptr() as *const std::ffi::c_void, gl::STREAM_DRAW);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (builder.vertices.len() * std::mem::size_of::<Vertex>()) as isize,
+            builder.vertices.as_ptr() as *const std::ffi::c_void,
+            gl::STREAM_DRAW,
+        );
 
         gl::GenBuffers(1, &mut ibo);
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ibo);
-        gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, (builder.indices.len() * std::mem::size_of::<u32>()) as isize, builder.indices.as_ptr() as *const std::ffi::c_void, gl::STREAM_DRAW);
+        gl::BufferData(
+            gl::ELEMENT_ARRAY_BUFFER,
+            (builder.indices.len() * std::mem::size_of::<u32>()) as isize,
+            builder.indices.as_ptr() as *const std::ffi::c_void,
+            gl::STREAM_DRAW,
+        );
 
         let pos = gl::GetAttribLocation(prog.id, b"pos\0" as *const u8 as *const i8) as GLuint;
         gl::EnableVertexAttribArray(pos);
-        gl::VertexAttribPointer(pos, 2, gl::SHORT, gl::FALSE, std::mem::size_of::<Vertex>() as GLint, offset!(Vertex, pos) as *const GLvoid);
+        gl::VertexAttribPointer(
+            pos,
+            2,
+            gl::SHORT,
+            gl::FALSE,
+            std::mem::size_of::<Vertex>() as GLint,
+            offset!(Vertex, pos) as *const GLvoid,
+        );
 
         let uv = gl::GetAttribLocation(prog.id, b"uv\0" as *const u8 as *const i8) as GLuint;
         gl::EnableVertexAttribArray(uv);
-        gl::VertexAttribPointer(uv, 2, gl::UNSIGNED_SHORT, gl::FALSE, std::mem::size_of::<Vertex>() as GLint, offset!(Vertex, uv) as *const GLvoid);
+        gl::VertexAttribPointer(
+            uv,
+            2,
+            gl::UNSIGNED_SHORT,
+            gl::FALSE,
+            std::mem::size_of::<Vertex>() as GLint,
+            offset!(Vertex, uv) as *const GLvoid,
+        );
 
         let col = gl::GetAttribLocation(prog.id, b"col\0" as *const u8 as *const i8) as GLuint;
         gl::EnableVertexAttribArray(col);
-        gl::VertexAttribPointer(col, 4, gl::UNSIGNED_BYTE, gl::TRUE, std::mem::size_of::<Vertex>() as GLint, offset!(Vertex, col) as *const GLvoid);
+        gl::VertexAttribPointer(
+            col,
+            4,
+            gl::UNSIGNED_BYTE,
+            gl::TRUE,
+            std::mem::size_of::<Vertex>() as GLint,
+            offset!(Vertex, col) as *const GLvoid,
+        );
 
         gl::UseProgram(prog.id);
 
@@ -225,27 +324,35 @@ fn main() {
         gl::Uniform1i(tex_uniform, 0);
     }
 
-    let mut running = true;
+    let running = true;
     while running {
         unsafe {
             gl::ClearColor(1.0, 1.0, 1.0, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
-            gl::DrawElements(gl::TRIANGLES, builder.indices.len() as GLint, gl::UNSIGNED_INT, 0 as *const std::ffi::c_void);
+            gl::DrawElements(
+                gl::TRIANGLES,
+                builder.indices.len() as GLint,
+                gl::UNSIGNED_INT,
+                0 as *const std::ffi::c_void,
+            );
         }
 
         context.swap_buffers().unwrap();
 
-        events_loop.poll_events(|event| match event {
-            glutin::Event::WindowEvent { event, .. } => {
-                use glutin::WindowEvent::*;
-                match event {
-                    CloseRequested => {
-                        running = false;
+        events_loop.run(move |event, _, cflow| {
+            *cflow = ControlFlow::Wait;
+            match event {
+                Event::WindowEvent {
+                    window_id: _,
+                    event,
+                } => match event {
+                    WindowEvent::CloseRequested => {
+                        *cflow = ControlFlow::Exit;
                     }
-                    _ => {}
-                }
+                    _ => (),
+                },
+                _ => (),
             }
-            _ => {}
         });
     }
 
@@ -277,7 +384,12 @@ impl Program {
                 let mut len: GLint = 0;
                 gl::GetProgramiv(prog, gl::INFO_LOG_LENGTH, &mut len);
                 let error = CString::new(vec![b' '; len as usize]).unwrap();
-                gl::GetProgramInfoLog(prog, len, std::ptr::null_mut(), error.as_ptr() as *mut GLchar);
+                gl::GetProgramInfoLog(
+                    prog,
+                    len,
+                    std::ptr::null_mut(),
+                    error.as_ptr() as *mut GLchar,
+                );
                 return Err(error.into_string().unwrap());
             }
 
@@ -294,7 +406,9 @@ impl Program {
 
 impl Drop for Program {
     fn drop(&mut self) {
-        unsafe { gl::DeleteProgram(self.id); }
+        unsafe {
+            gl::DeleteProgram(self.id);
+        }
     }
 }
 
@@ -310,7 +424,12 @@ fn shader(shader_src: &CStr, shader_type: GLenum) -> Result<GLuint, String> {
             let mut len: GLint = 0;
             gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut len);
             let error = CString::new(vec![b' '; len as usize]).unwrap();
-            gl::GetShaderInfoLog(shader, len, std::ptr::null_mut(), error.as_ptr() as *mut GLchar);
+            gl::GetShaderInfoLog(
+                shader,
+                len,
+                std::ptr::null_mut(),
+                error.as_ptr() as *mut GLchar,
+            );
             return Err(error.into_string().unwrap());
         }
 
