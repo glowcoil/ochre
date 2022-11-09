@@ -11,7 +11,7 @@ impl Vec2 {
     /// Constructs a 2-dimensional vector.
     #[inline]
     pub fn new(x: f32, y: f32) -> Vec2 {
-        Vec2 { x: x, y: y }
+        Vec2 { x, y }
     }
 
     /// Computes the dot product between two vectors.
@@ -72,6 +72,7 @@ impl Vec2 {
 
 impl ops::Add for Vec2 {
     type Output = Vec2;
+
     #[inline]
     fn add(self, rhs: Vec2) -> Vec2 {
         Vec2 {
@@ -90,6 +91,7 @@ impl ops::AddAssign for Vec2 {
 
 impl ops::Sub for Vec2 {
     type Output = Vec2;
+
     #[inline]
     fn sub(self, rhs: Vec2) -> Vec2 {
         Vec2 {
@@ -108,6 +110,7 @@ impl ops::SubAssign for Vec2 {
 
 impl ops::Mul<f32> for Vec2 {
     type Output = Vec2;
+
     #[inline]
     fn mul(self, rhs: f32) -> Vec2 {
         Vec2 {
@@ -119,6 +122,7 @@ impl ops::Mul<f32> for Vec2 {
 
 impl ops::Mul<Vec2> for f32 {
     type Output = Vec2;
+
     #[inline]
     fn mul(self, rhs: Vec2) -> Vec2 {
         Vec2 {
@@ -156,6 +160,7 @@ impl Mat2x2 {
 
 impl ops::Mul<Mat2x2> for Mat2x2 {
     type Output = Mat2x2;
+
     #[inline]
     fn mul(self, rhs: Mat2x2) -> Mat2x2 {
         Mat2x2([
@@ -169,6 +174,7 @@ impl ops::Mul<Mat2x2> for Mat2x2 {
 
 impl ops::Mul<Vec2> for Mat2x2 {
     type Output = Vec2;
+
     #[inline]
     fn mul(self, rhs: Vec2) -> Vec2 {
         Vec2 {
@@ -180,6 +186,7 @@ impl ops::Mul<Vec2> for Mat2x2 {
 
 impl ops::Mul<Mat2x2> for f32 {
     type Output = Mat2x2;
+
     #[inline]
     fn mul(self, rhs: Mat2x2) -> Mat2x2 {
         Mat2x2([
@@ -193,6 +200,7 @@ impl ops::Mul<Mat2x2> for f32 {
 
 impl ops::Mul<f32> for Mat2x2 {
     type Output = Mat2x2;
+
     #[inline]
     fn mul(self, rhs: f32) -> Mat2x2 {
         rhs * self
@@ -210,10 +218,7 @@ impl Transform {
     /// Constructs an affine transformation from the given transformation
     /// matrix and translation vector.
     pub fn new(matrix: Mat2x2, offset: Vec2) -> Transform {
-        Transform {
-            matrix,
-            offset,
-        }
+        Transform { matrix, offset }
     }
 
     /// Constructs an identity transformation.

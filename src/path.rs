@@ -15,24 +15,20 @@ impl PathCmd {
     /// Applies the given transform to the path command.
     pub fn transform(&self, transform: Transform) -> PathCmd {
         match *self {
-            PathCmd::Move(point) => {
-                PathCmd::Move(transform.apply(point))
-            }
-            PathCmd::Line(point) => {
-                PathCmd::Line(transform.apply(point))
-            }
+            PathCmd::Move(point) => PathCmd::Move(transform.apply(point)),
+            PathCmd::Line(point) => PathCmd::Line(transform.apply(point)),
             PathCmd::Quadratic(control, point) => {
                 PathCmd::Quadratic(transform.apply(control), transform.apply(point))
             }
-            PathCmd::Cubic(control1, control2, point) => {
-                PathCmd::Cubic(transform.apply(control1), transform.apply(control2), transform.apply(point))
-            }
+            PathCmd::Cubic(control1, control2, point) => PathCmd::Cubic(
+                transform.apply(control1),
+                transform.apply(control2),
+                transform.apply(point),
+            ),
             PathCmd::Conic(control, point, weight) => {
                 PathCmd::Conic(transform.apply(control), transform.apply(point), weight)
             }
-            PathCmd::Close => {
-                PathCmd::Close
-            }
+            PathCmd::Close => PathCmd::Close,
         }
     }
 
@@ -73,6 +69,7 @@ impl PathCmd {
                 }
             }
             PathCmd::Conic(control, point, weight) => {
+                #[allow(clippy::too_many_arguments)]
                 fn flatten_conic(
                     last: Vec2,
                     control: Vec2,
@@ -92,15 +89,30 @@ impl PathCmd {
                     let midpoint = (1.0 / denom) * Vec2::lerp(t, p01, p12);
                     let err = (midpoint - 0.5 * (p0 + p1)).length();
                     if err > tolerance {
-                        flatten_conic(last, control, point, weight, t0, t, p0, midpoint, tolerance, callback);
-                        flatten_conic(last, control, point, weight, t, t1, midpoint, p1, tolerance, callback);
+                        flatten_conic(
+                            last, control, point, weight, t0, t, p0, midpoint, tolerance, callback,
+                        );
+                        flatten_conic(
+                            last, control, point, weight, t, t1, midpoint, p1, tolerance, callback,
+                        );
                     } else {
                         (callback)(PathCmd::Line(midpoint));
                         (callback)(PathCmd::Line(p1));
                     }
-                };
+                }
 
-                flatten_conic(last, control, point, weight, 0.0, 1.0, last, point, tolerance, &mut callback);
+                flatten_conic(
+                    last,
+                    control,
+                    point,
+                    weight,
+                    0.0,
+                    1.0,
+                    last,
+                    point,
+                    tolerance,
+                    &mut callback,
+                );
             }
             PathCmd::Close => {
                 (callback)(PathCmd::Close);
@@ -160,18 +172,32 @@ pub fn stroke(polygon: &[PathCmd], width: f32) -> Vec<PathCmd> {
     }
 
     #[inline]
-    fn join(path: &mut Vec<PathCmd>, width: f32, prev_normal: Vec2, next_normal: Vec2, point: Vec2) {
+    fn join(
+        path: &mut Vec<PathCmd>,
+        width: f32,
+        prev_normal: Vec2,
+        next_normal: Vec2,
+        point: Vec2,
+    ) {
         let offset = 1.0 / (1.0 + prev_normal.dot(next_normal));
         if offset.abs() > 2.0 {
             path.push(PathCmd::Line(point + 0.5 * width * prev_normal));
             path.push(PathCmd::Line(point + 0.5 * width * next_normal));
         } else {
-            path.push(PathCmd::Line(point + 0.5 * width * offset * (prev_normal + next_normal)));
+            path.push(PathCmd::Line(
+                point + 0.5 * width * offset * (prev_normal + next_normal),
+            ));
         }
     }
 
     #[inline]
-    fn offset(path: &mut Vec<PathCmd>, width: f32, contour: &[PathCmd], closed: bool, reverse: bool) {
+    fn offset(
+        path: &mut Vec<PathCmd>,
+        width: f32,
+        contour: &[PathCmd],
+        closed: bool,
+        reverse: bool,
+    ) {
         let first_point = if closed == reverse {
             get_point(contour[0])
         } else {
