@@ -1,3 +1,4 @@
+#![allow(clippy::needless_doctest_main)]
 //! High-quality anti-aliased vector graphics rendering on the GPU.
 //!
 //! `ochre` rasterizes paths to a set of 8×8-pixel alpha-mask tiles at the
@@ -33,16 +34,22 @@
 //!     let mut builder = Builder;
 //!
 //!     let mut rasterizer = Rasterizer::new();
-//!     rasterizer.fill(&[
-//!         PathCmd::Move(Vec2::new(400.0, 300.0)),
-//!         PathCmd::Quadratic(Vec2::new(500.0, 200.0), Vec2::new(400.0, 100.0)),
-//!         PathCmd::Cubic(Vec2::new(350.0, 150.0), Vec2::new(100.0, 250.0), Vec2::new(400.0, 300.0)),
-//!         PathCmd::Close,
-//!     ], Transform::id());
+//!     rasterizer.fill(
+//!         &[
+//!             PathCmd::Move(Vec2::new(400.0, 300.0)),
+//!             PathCmd::Quadratic(Vec2::new(500.0, 200.0), Vec2::new(400.0, 100.0)),
+//!             PathCmd::Cubic(
+//!                 Vec2::new(350.0, 150.0),
+//!                 Vec2::new(100.0, 250.0),
+//!                 Vec2::new(400.0, 300.0),
+//!             ),
+//!             PathCmd::Close,
+//!         ],
+//!         Transform::id(),
+//!     );
 //!     rasterizer.finish(&mut builder);
 //! }
 //! ```
-
 
 mod geom;
 mod path;

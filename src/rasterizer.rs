@@ -82,13 +82,21 @@ impl Rasterizer {
             let mut row_t1 = if self.last.y == point.y {
                 std::f32::INFINITY
             } else {
-                let next_y = if point.y > self.last.y { (y + 1) as f32 } else { y as f32 };
+                let next_y = if point.y > self.last.y {
+                    (y + 1) as f32
+                } else {
+                    y as f32
+                };
                 (dtdy * (next_y - self.last.y)).min(1.0)
             };
             let mut col_t1 = if self.last.x == point.x {
                 std::f32::INFINITY
             } else {
-                let next_x = if point.x > self.last.x { (x + 1) as f32 } else { x as f32 };
+                let next_x = if point.x > self.last.x {
+                    (x + 1) as f32
+                } else {
+                    x as f32
+                };
                 (dtdx * (next_x - self.last.x)).min(1.0)
             };
             let x_step = dtdx.abs();
@@ -141,18 +149,16 @@ impl Rasterizer {
 
     /// Adds a [`PathCmd`] to be rasterized.
     ///
-    /// [`PathCmd`]: crate::PathCmd 
+    /// [`PathCmd`]: crate::PathCmd
     pub fn command(&mut self, command: PathCmd) {
-        command.flatten(self.last, TOLERANCE, |cmd| {
-            match cmd {
-                PathCmd::Move(point) => {
-                    self.move_to(point);
-                }
-                PathCmd::Line(point) => {
-                    self.line_to(point);
-                }
-                _ => {}
+        command.flatten(self.last, TOLERANCE, |cmd| match cmd {
+            PathCmd::Move(point) => {
+                self.move_to(point);
             }
+            PathCmd::Line(point) => {
+                self.line_to(point);
+            }
+            _ => {}
         });
     }
 
@@ -191,24 +197,35 @@ impl Rasterizer {
         }
 
         let mut bins = Vec::new();
-        let mut bin = Bin { tile_x: 0, tile_y: 0, start: 0, end: 0 };
+        let mut bin = Bin {
+            tile_x: 0,
+            tile_y: 0,
+            start: 0,
+            end: 0,
+        };
         if let Some(first) = self.increments.first() {
-            bin.tile_x = (first.x as i16).wrapping_div_euclid(TILE_SIZE as i16);
-            bin.tile_y = (first.y as i16).wrapping_div_euclid(TILE_SIZE as i16);
+            bin.tile_x = first.x.wrapping_div_euclid(TILE_SIZE as i16);
+            bin.tile_y = first.y.wrapping_div_euclid(TILE_SIZE as i16);
         }
         for (i, increment) in self.increments.iter().enumerate() {
             let tile_x = increment.x.wrapping_div_euclid(TILE_SIZE as i16);
             let tile_y = increment.y.wrapping_div_euclid(TILE_SIZE as i16);
             if tile_x != bin.tile_x || tile_y != bin.tile_y {
                 bins.push(bin);
-                bin = Bin { tile_x, tile_y, start: i, end: i };
+                bin = Bin {
+                    tile_x,
+                    tile_y,
+                    start: i,
+                    end: i,
+                };
             }
             bin.end += 1;
         }
         bins.push(bin);
         bins.sort_unstable_by_key(|bin| (bin.tile_y, bin.tile_x));
 
-        self.tile_increments.sort_unstable_by_key(|tile_inc| (tile_inc.tile_y, tile_inc.tile_x));
+        self.tile_increments
+            .sort_unstable_by_key(|tile_inc| (tile_inc.tile_y, tile_inc.tile_x));
 
         let mut areas = [0.0; TILE_SIZE * TILE_SIZE];
         let mut heights = [0.0; TILE_SIZE * TILE_SIZE];
@@ -223,22 +240,30 @@ impl Rasterizer {
             for increment in &self.increments[bin.start..bin.end] {
                 let x = (increment.x as usize).wrapping_rem_euclid(TILE_SIZE);
                 let y = (increment.y as usize).wrapping_rem_euclid(TILE_SIZE);
-                areas[(y * TILE_SIZE + x) as usize] += increment.area;
-                heights[(y * TILE_SIZE + x) as usize] += increment.height;
+                areas[y * TILE_SIZE + x] += increment.area;
+                heights[y * TILE_SIZE + x] += increment.height;
             }
 
-            if i + 1 == bins.len() || bins[i + 1].tile_x != bin.tile_x || bins[i + 1].tile_y != bin.tile_y {
+            if i + 1 == bins.len()
+                || bins[i + 1].tile_x != bin.tile_x
+                || bins[i + 1].tile_y != bin.tile_y
+            {
                 let mut tile = [0; TILE_SIZE * TILE_SIZE];
                 for y in 0..TILE_SIZE {
                     let mut accum = prev[y];
                     for x in 0..TILE_SIZE {
-                        tile[y * TILE_SIZE + x] = ((accum + areas[y * TILE_SIZE + x]).abs() * 256.0).min(255.0) as u8;
+                        tile[y * TILE_SIZE + x] =
+                            ((accum + areas[y * TILE_SIZE + x]).abs() * 256.0).min(255.0) as u8;
                         accum += heights[y * TILE_SIZE + x];
                     }
                     next[y] = accum;
                 }
 
-                builder.tile(bin.tile_x * TILE_SIZE as i16, bin.tile_y * TILE_SIZE as i16, tile);
+                builder.tile(
+                    bin.tile_x * TILE_SIZE as i16,
+                    bin.tile_y * TILE_SIZE as i16,
+                    tile,
+                );
 
                 areas = [0.0; TILE_SIZE * TILE_SIZE];
                 heights = [0.0; TILE_SIZE * TILE_SIZE];
@@ -249,10 +274,14 @@ impl Rasterizer {
                 }
                 next = [0.0; TILE_SIZE];
 
-                if i + 1 < bins.len() && bins[i + 1].tile_y == bin.tile_y && bins[i + 1].tile_x > bin.tile_x + 1 {
+                if i + 1 < bins.len()
+                    && bins[i + 1].tile_y == bin.tile_y
+                    && bins[i + 1].tile_x > bin.tile_x + 1
+                {
                     while tile_increments_i < self.tile_increments.len() {
                         let tile_increment = self.tile_increments[tile_increments_i];
-                        if (tile_increment.tile_y, tile_increment.tile_x) > (bin.tile_y, bin.tile_x) {
+                        if (tile_increment.tile_y, tile_increment.tile_x) > (bin.tile_y, bin.tile_x)
+                        {
                             break;
                         }
                         winding += tile_increment.sign as isize;
@@ -260,10 +289,20 @@ impl Rasterizer {
                     }
                     if winding != 0 {
                         let width = bins[i + 1].tile_x - bin.tile_x - 1;
-                        builder.span((bin.tile_x + 1) * TILE_SIZE as i16, bin.tile_y * TILE_SIZE as i16, width as u16 * TILE_SIZE as u16);
+                        builder.span(
+                            (bin.tile_x + 1) * TILE_SIZE as i16,
+                            bin.tile_y * TILE_SIZE as i16,
+                            width as u16 * TILE_SIZE as u16,
+                        );
                     }
                 }
             }
         }
+    }
+}
+
+impl Default for Rasterizer {
+    fn default() -> Self {
+        Self::new()
     }
 }

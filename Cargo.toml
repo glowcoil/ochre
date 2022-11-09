@@ -2,7 +2,7 @@
 name = "ochre"
 version = "0.2.0"
 authors = ["Micah Johnston <micah@glowcoil.com>"]
-edition = "2018"
+edition = "2021"
 description = "High-quality anti-aliased vector graphics rendering on the GPU"
 repository = "https://github.com/glowcoil/ochre"
 readme = "README.md"
@@ -11,6 +11,6 @@ license = "MIT/Apache-2.0"
 [dependencies]
 
 [dev-dependencies]
-glutin = "0.21.0"
-gl = "0.11.0"
-usvg = "0.13.0"
+glutin = "0.21.2"
+gl = "0.14.0"
+usvg = "0.14.1"
